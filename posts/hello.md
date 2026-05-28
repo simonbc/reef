@@ -7,7 +7,7 @@ date: 2026-05-28
 
 This post is part of the real reef workspace scaffold.
 
-If publishing works from here, reef has moved beyond the spike:
+If publishing works from here, the core reef loop is alive:
 
 - posts live in the workspace root
 - skills load from `skills/`

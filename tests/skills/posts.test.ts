@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import posts from "./index";
+import posts from "../../skills/posts";
 import type { ToolContext, WorkspaceAPI } from "../../src/skill-api";
 
 describe("posts skill", () => {

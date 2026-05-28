@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseMarkdown } from "./markdown";
+import { parseMarkdown } from "../../src/core/markdown";
 
 describe("parseMarkdown", () => {
   test("uses frontmatter title and renders basic markdown", () => {

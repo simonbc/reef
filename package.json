@@ -6,6 +6,6 @@
   "scripts": {
     "reef": "bun run bin/reef.ts",
     "test": "bun test",
-    "check": "bun test && bun build bin/reef.ts --target bun --outdir /private/tmp/reef-build && bun run --cwd spike check"
+    "check": "bun test && bun build bin/reef.ts --target bun --outdir /private/tmp/reef-build"
   }
 }

@@ -46,8 +46,6 @@ Do not skip the red step for core runtime behavior, skill loading, workspace I/O
 publishing behavior, subscription behavior, config parsing, state persistence, UI
 command semantics, or CLI command semantics.
 
-Spike code may be messier. Production Reef code should move through tests.
-
 ## Commands
 
 ```sh
@@ -57,8 +55,22 @@ bun run reef skill list
 bun run reef "publish posts/hello.md to my wordpress"
 ```
 
-`bun run check` must stay fast. It should run tests, bundle the real CLI, and
-verify the spike still builds.
+`bun run check` must stay fast. It should run tests and bundle the real CLI.
+
+## Test Layout
+
+Tests live under `tests/`, not next to implementation files.
+
+Use this shape:
+
+```text
+tests/
+  core/
+  skills/
+```
+
+Keep tests behavior-focused. They may import runtime modules and skill entrypoints,
+but should not force production code to expose internals solely for tests.
 
 ## Runtime Model
 
@@ -311,7 +323,6 @@ Current source layout:
 - `src/skill-api/`: public API for skills
 - `skills/`: built-in skills using the same shape as third-party skills
 - `posts/`, `pages/`, `media/`: workspace content
-- `spike/`: throwaway proof of the WordPress publishing wedge
 
 Keep `src/skill-api/` small and stable. If a helper is only needed by one skill,
 put it in that skill or `src/core/` until a second real use appears.
@@ -392,4 +403,3 @@ Avoid:
 - treating pages as the primary product
 - making themes or static-site rendering the center of the system
 - adding skill-to-skill dependencies in v1
-

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { runAgentOnce } from "./agent";
-import type { LoadedSkill } from "./skill-loader";
+import { runAgentOnce } from "../../src/core/agent";
+import type { LoadedSkill } from "../../src/core/skill-loader";
 
 const originalFetch = globalThis.fetch;
 

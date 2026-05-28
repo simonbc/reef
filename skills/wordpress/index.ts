@@ -39,15 +39,15 @@ export default defineSkill({
         }
 
         const url = configString(ctx.config.url) ?? process.env.REEF_WP_URL;
-        const username = ctx.secrets.username ?? process.env.REEF_WP_USERNAME;
+        const username =
+          ctx.secrets.username ?? process.env.REEF_WORDPRESS_USERNAME;
         const appPassword =
-          ctx.secrets.app_password ?? process.env.REEF_WP_APP_PASSWORD;
+          ctx.secrets.app_password ?? process.env.REEF_WORDPRESS_APP_PASSWORD;
 
         if (!url || !username || !appPassword) {
           return [
             "Skill 'wordpress' is not configured.",
             "Set REEF_WP_URL, REEF_WORDPRESS_USERNAME, and REEF_WORDPRESS_APP_PASSWORD.",
-            "The spike also accepts REEF_WP_USERNAME and REEF_WP_APP_PASSWORD.",
           ].join(" ");
         }
 

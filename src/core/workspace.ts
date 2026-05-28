@@ -140,16 +140,12 @@ async function deleteMarkdown(root: string, kind: "posts" | "pages", slug: strin
 
 function markdownCandidates(root: string, kind: "posts" | "pages", slugOrPath: string): string[] {
   const candidates = [slugOrPath];
-  const withoutSpike = slugOrPath.startsWith("spike/")
-    ? slugOrPath.slice("spike/".length)
-    : slugOrPath;
 
-  candidates.push(withoutSpike);
-  candidates.push(join(kind, withoutSpike));
+  candidates.push(join(kind, slugOrPath));
 
-  if (!withoutSpike.endsWith(".md")) {
-    candidates.push(`${withoutSpike}.md`);
-    candidates.push(join(kind, `${withoutSpike}.md`));
+  if (!slugOrPath.endsWith(".md")) {
+    candidates.push(`${slugOrPath}.md`);
+    candidates.push(join(kind, `${slugOrPath}.md`));
   }
 
   return [...new Set(candidates)].map((candidate) => resolve(root, candidate));

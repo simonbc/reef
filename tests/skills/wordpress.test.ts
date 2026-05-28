@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import wordpress from "./index";
+import wordpress from "../../skills/wordpress";
 import type { ToolContext, WorkspaceAPI } from "../../src/skill-api";
 
 const originalFetch = globalThis.fetch;
@@ -7,8 +7,6 @@ const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
   delete process.env.REEF_WP_URL;
-  delete process.env.REEF_WP_USERNAME;
-  delete process.env.REEF_WP_APP_PASSWORD;
   delete process.env.REEF_WORDPRESS_USERNAME;
   delete process.env.REEF_WORDPRESS_APP_PASSWORD;
 });
