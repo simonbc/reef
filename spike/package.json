@@ -1,0 +1,10 @@
+{
+  "name": "reef-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "reef": "bun run bin/reef.ts",
+    "check": "bun build bin/reef.ts --outdir /private/tmp/reef-spike-build"
+  }
+}

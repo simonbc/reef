@@ -1,0 +1,4 @@
+[skill]
+name = "posts"
+version = "0.1.0"
+description = "Read and manage local markdown posts."

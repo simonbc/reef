@@ -1,0 +1,11 @@
+[skill]
+name = "wordpress"
+version = "0.1.0"
+description = "Publish local markdown posts to WordPress."
+
+[config]
+url = { description = "WordPress site URL", required = true }
+
+[secrets]
+username = { description = "WordPress username", required = true }
+app_password = { description = "WordPress application password", required = true }
