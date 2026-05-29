@@ -10,6 +10,7 @@ bun run reef skill list
 bun run reef build
 bun run reef "publish posts/hello.md to my wordpress"
 bun run reef "publish my site to github pages"
+bun run reef "post hello from Reef to mastodon"
 bun run reef "make the site feel like a clean personal notebook"
 ```
 
@@ -44,6 +45,9 @@ url = "https://example.wordpress.com"
 repo = "git@github.com:you/you.github.io.git"
 branch = "gh-pages"
 
+[mastodon]
+instance = "https://mastodon.social"
+
 [wordpress.personal]
 url = "https://personal.wordpress.com"
 
@@ -71,6 +75,7 @@ WordPress publishing currently reads credentials from environment variables:
 export ANTHROPIC_API_KEY=sk-ant-...
 export REEF_WORDPRESS_USERNAME=your-wordpress-username
 export REEF_WORDPRESS_APP_PASSWORD='xxxx xxxx xxxx xxxx xxxx xxxx'
+export REEF_MASTODON_ACCESS_TOKEN='...'
 ```
 
 GitHub Pages publishing expects `dist/` to exist and reads its target repository
@@ -80,6 +85,32 @@ from merged config:
 bun run reef build
 bun run reef "publish my site to github pages"
 ```
+
+Mastodon publishing uses a manually generated access token for now. Create a
+Mastodon application in your instance's Development settings with
+`write:statuses`, then set:
+
+```sh
+export REEF_MASTODON_ACCESS_TOKEN='...'
+```
+
+Configure the instance:
+
+```toml
+[mastodon]
+instance = "https://mastodon.social"
+```
+
+Then post direct text or publish an existing local markdown post:
+
+```sh
+bun run reef "post hello from Reef to mastodon"
+bun run reef "publish posts/hello.md to mastodon"
+```
+
+Direct Mastodon status prompts create a dated markdown post in `posts/` first,
+then publish that canonical source to Mastodon. Existing post prompts publish
+from the named markdown file.
 
 ## Theme
 

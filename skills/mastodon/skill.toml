@@ -1,0 +1,4 @@
+[skill]
+name = "mastodon"
+version = "0.1.0"
+description = "Publish local posts or direct statuses to Mastodon."
