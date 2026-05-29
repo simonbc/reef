@@ -4,6 +4,13 @@ import { createInterface } from "node:readline/promises";
 import { runAgentOnce, type AgentEvent, type ChatTurn } from "../src/core/agent";
 import { buildSite } from "../src/core/build";
 import { runCliHarness } from "../src/core/cli-harness";
+import {
+  formatContentList,
+  formatContentRead,
+  listContent,
+  readContent,
+  type ContentKind,
+} from "../src/core/content-commands";
 import { loadConfig } from "../src/core/config";
 import { createHarnessApp } from "../src/core/harness";
 import { openTarget, resolveOpenTarget } from "../src/core/open";
@@ -28,6 +35,16 @@ try {
 
   if (command === "build") {
     await build();
+    process.exit(0);
+  }
+
+  if (command === "posts" || command === "pages") {
+    await listContentCommand(command, args.slice(1));
+    process.exit(0);
+  }
+
+  if ((command === "post" || command === "page") && args[1] === "read") {
+    await readContentCommand(command === "post" ? "posts" : "pages", args.slice(2));
     process.exit(0);
   }
 
@@ -141,6 +158,28 @@ async function openCommand(args: string[]): Promise<void> {
   console.log(target.type === "server" ? `Opened ${target.url}` : `Opened ${target.path}`);
 }
 
+async function listContentCommand(kind: ContentKind, args: string[]): Promise<void> {
+  const workspace = await createWorkspace(process.cwd());
+  console.log(formatContentList(await listContent(workspace, kind), kind, {
+    json: hasFlag(args, "--json"),
+  }));
+}
+
+async function readContentCommand(kind: ContentKind, args: string[]): Promise<void> {
+  const json = hasFlag(args, "--json");
+  const ref = args.find((arg) => !arg.startsWith("--"));
+  if (!ref) {
+    throw new Error(`Usage: reef ${kind === "posts" ? "post" : "page"} read <slug|path|number> [--json]`);
+  }
+
+  const workspace = await createWorkspace(process.cwd());
+  console.log(formatContentRead(await readContent(workspace, kind, ref), { json }));
+}
+
+function hasFlag(args: string[], flag: string): boolean {
+  return args.includes(flag);
+}
+
 async function runInteractiveHarness(): Promise<void> {
   console.log(await buildText());
 
@@ -197,6 +236,10 @@ Usage:
   reef "publish posts/hello.md to my wordpress"
   reef skill list
   reef build
+  reef posts [--json]
+  reef pages [--json]
+  reef post read <slug|path|number> [--json]
+  reef page read <slug|path|number> [--json]
   reef open
   reef open post hello
   reef open page about
