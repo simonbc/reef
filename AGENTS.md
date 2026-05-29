@@ -51,6 +51,7 @@ command semantics, or CLI command semantics.
 ```sh
 bun test
 bun run check
+bun run reef
 bun run reef skill list
 bun run reef build
 bun run reef "publish posts/hello.md to my wordpress"
@@ -91,6 +92,12 @@ Running `reef` should eventually:
 
 The browser UI is the primary interface. CLI one-shot prompts exist because
 hackers need them, but the product shape is browser-first.
+
+Current M2 harness behavior: bare `reef` starts a terminal prompt loop and a
+local site server. The terminal shows `>` when ready for a prompt. The local
+server serves the built site itself at `http://localhost:3000/`, not a Reef admin
+UI. Keep the browser surface as the user’s website until there is a clear reason
+to add a separate web UI.
 
 ## Canonical Workspace
 
@@ -351,6 +358,9 @@ Current theme placeholders:
 - `{{content}}`
 
 `theme/layout.html` must include `{{content}}`.
+
+Theme update tools rebuild `dist/` automatically after writing canonical theme
+files. This keeps preview/publish from using stale generated output.
 
 ## Architecture Boundaries
 

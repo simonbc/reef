@@ -1,10 +1,12 @@
 import { defineSkill, defineTool } from "../../src/skill-api";
+import { buildSite } from "../../src/core/build";
+import { loadConfig } from "../../src/core/config";
 import { readTheme, writeThemeFile } from "../../src/core/theme";
 
 export default defineSkill({
   name: "theme",
   systemPrompt:
-    "Theme files are canonical design source in theme/layout.html and theme/styles.css. Update theme files, then ask the user to run reef build or run build before publishing.",
+    "Theme files are canonical design source in theme/layout.html and theme/styles.css. Theme update tools rebuild dist/ automatically after writing canonical theme files.",
   tools: [
     defineTool({
       name: "read",
@@ -45,7 +47,8 @@ export default defineSkill({
       },
       run: async (input, ctx) => {
         await writeThemeFile(ctx.workspace.root, "styles.css", stringInput(input, "css"));
-        return "Updated theme/styles.css.";
+        await rebuild(ctx.workspace.root, ctx.workspace);
+        return "Updated theme/styles.css and rebuilt dist/.";
       },
     }),
     defineTool({
@@ -69,7 +72,8 @@ export default defineSkill({
           throw new Error("theme/layout.html must include {{content}}.");
         }
         await writeThemeFile(ctx.workspace.root, "layout.html", html);
-        return "Updated theme/layout.html.";
+        await rebuild(ctx.workspace.root, ctx.workspace);
+        return "Updated theme/layout.html and rebuilt dist/.";
       },
     }),
   ],
@@ -84,4 +88,13 @@ function stringInput(input: unknown, key: string): string {
     throw new Error(`Tool input requires ${key}.`);
   }
   return value;
+}
+
+async function rebuild(root: string, workspace: Parameters<typeof buildSite>[0]["workspace"]) {
+  const config = await loadConfig(root);
+  await buildSite({
+    title: config.title,
+    domain: config.domain,
+    workspace,
+  });
 }

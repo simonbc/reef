@@ -14,6 +14,15 @@ type Message = {
   role: "user" | "assistant";
   content: string | ContentBlock[] | ToolResultBlock[];
 };
+export type ChatTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+export type AgentEvent =
+  | { type: "phase"; message: string }
+  | { type: "tool_start"; name: string; input: unknown }
+  | { type: "tool_result"; name: string; result: string }
+  | { type: "tool_error"; name: string; error: string };
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -22,6 +31,8 @@ export async function runAgentOnce(input: {
   skills: LoadedSkill[];
   anthropicApiKey?: string;
   model: string;
+  history?: ChatTurn[];
+  onEvent?: (event: AgentEvent) => void;
 }): Promise<string> {
   if (!input.anthropicApiKey) {
     throw new Error(
@@ -36,10 +47,14 @@ export async function runAgentOnce(input: {
     input_schema: item.tool.inputSchema,
   }));
 
-  const messages: Message[] = [{ role: "user", content: input.prompt }];
+  const messages: Message[] = [
+    ...(input.history ?? []),
+    { role: "user", content: input.prompt },
+  ];
   const output: string[] = [];
 
   for (let turn = 0; turn < 8; turn++) {
+    input.onEvent?.({ type: "phase", message: "Asking model" });
     const response = await anthropicMessage({
       apiKey: input.anthropicApiKey,
       model: input.model,
@@ -73,6 +88,11 @@ export async function runAgentOnce(input: {
     for (const toolUse of toolUses) {
       const item = toolMap.get(toolUse.name);
       if (!item) {
+        input.onEvent?.({
+          type: "tool_error",
+          name: toolUse.name,
+          error: `Unknown tool: ${toolUse.name}`,
+        });
         results.push({
           type: "tool_result",
           tool_use_id: toolUse.id,
@@ -82,18 +102,54 @@ export async function runAgentOnce(input: {
         continue;
       }
 
-      try {
-        const result = await item.tool.run(toolUse.input, item.skill.context);
+      if (isPublishTool(toolUse.name) && !hasPublishIntent(input.prompt)) {
+        const errorMessage = [
+          `Blocked ${toolUse.name}.`,
+          "Publishing requires an explicit publish/deploy/push request in the current prompt.",
+        ].join(" ");
+        input.onEvent?.({
+          type: "tool_error",
+          name: toolUse.name,
+          error: errorMessage,
+        });
         results.push({
           type: "tool_result",
           tool_use_id: toolUse.id,
-          content: toolResultText(result),
+          content: errorMessage,
+          is_error: true,
+        });
+        continue;
+      }
+
+      try {
+        input.onEvent?.({
+          type: "tool_start",
+          name: toolUse.name,
+          input: toolUse.input,
+        });
+        const result = await item.tool.run(toolUse.input, item.skill.context);
+        const resultText = toolResultText(result);
+        input.onEvent?.({
+          type: "tool_result",
+          name: toolUse.name,
+          result: resultText,
+        });
+        results.push({
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: resultText,
         });
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        input.onEvent?.({
+          type: "tool_error",
+          name: toolUse.name,
+          error: errorMessage,
+        });
         results.push({
           type: "tool_result",
           tool_use_id: toolUse.id,
-          content: error instanceof Error ? error.message : String(error),
+          content: errorMessage,
           is_error: true,
         });
       }
@@ -167,6 +223,7 @@ function systemPrompt(skills: LoadedSkill[]): string {
   return [
     "You are reef, a local programmable runtime for publishing markdown to the social web.",
     "Use the loaded tools to read local posts/pages and publish to configured endpoints.",
+    "Publishing tools perform external side effects. Use them only when the current user prompt explicitly asks to publish, deploy, push, post to a platform, or create a remote draft.",
     "Be concise. When a publishing tool returns a live URL, show it to the user.",
     ...fragments,
   ].join("\n\n");
@@ -174,4 +231,14 @@ function systemPrompt(skills: LoadedSkill[]): string {
 
 function toolResultText(result: ToolResult): string {
   return typeof result === "string" ? result : result.text;
+}
+
+function isPublishTool(name: string): boolean {
+  return /\bpublish\b|publish_|_publish|deploy|push/.test(name);
+}
+
+function hasPublishIntent(prompt: string): boolean {
+  return /\b(publish|deploy|push|ship|post\s+to|send\s+to|upload|create\s+(a\s+)?remote\s+draft|create\s+(a\s+)?draft)\b/i.test(
+    prompt,
+  );
 }

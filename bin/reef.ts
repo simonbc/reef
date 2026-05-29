@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 
-import { runAgentOnce } from "../src/core/agent";
+import { createInterface } from "node:readline/promises";
+import { runAgentOnce, type AgentEvent, type ChatTurn } from "../src/core/agent";
 import { buildSite } from "../src/core/build";
+import { runCliHarness } from "../src/core/cli-harness";
 import { loadConfig } from "../src/core/config";
+import { createHarnessApp } from "../src/core/harness";
 import { loadSkills } from "../src/core/skill-loader";
 import { createSpinner } from "../src/core/spinner";
 import { renderTerminalMarkdown } from "../src/core/terminal-markdown";
@@ -13,7 +16,7 @@ const command = args[0];
 
 try {
   if (!command) {
-    printUsage();
+    await runInteractiveHarness();
     process.exit(0);
   }
 
@@ -35,10 +38,6 @@ try {
 }
 
 async function runPrompt(prompt: string): Promise<void> {
-  const config = await loadConfig(process.cwd());
-  const workspace = await createWorkspace(process.cwd());
-  const skills = await loadSkills({ config, workspace });
-
   const spinner = createSpinner("Thinking", {
     enabled: process.stderr.isTTY,
   });
@@ -46,12 +45,7 @@ async function runPrompt(prompt: string): Promise<void> {
 
   let result = "";
   try {
-    result = await runAgentOnce({
-      prompt,
-      skills,
-      anthropicApiKey: process.env[config.anthropicKeyEnv],
-      model: process.env.CLAUDE_MODEL ?? "claude-opus-4-7",
-    });
+    result = await runPromptText(prompt);
     spinner.stop();
   } catch (error) {
     spinner.stop("Stopped");
@@ -63,7 +57,33 @@ async function runPrompt(prompt: string): Promise<void> {
   }
 }
 
+async function runPromptText(
+  prompt: string,
+  history: ChatTurn[] = [],
+  onEvent?: (event: AgentEvent) => void,
+) {
+  onEvent?.({ type: "phase", message: "Loading config" });
+  const config = await loadConfig(process.cwd());
+  onEvent?.({ type: "phase", message: "Loading workspace" });
+  const workspace = await createWorkspace(process.cwd());
+  onEvent?.({ type: "phase", message: "Loading skills" });
+  const skills = await loadSkills({ config, workspace });
+
+  return runAgentOnce({
+    prompt,
+    skills,
+    anthropicApiKey: process.env[config.anthropicKeyEnv],
+    model: process.env.CLAUDE_MODEL ?? "claude-opus-4-7",
+    history,
+    onEvent,
+  });
+}
+
 async function build(): Promise<void> {
+  console.log(await buildText());
+}
+
+async function buildText(): Promise<string> {
   const config = await loadConfig(process.cwd());
   const workspace = await createWorkspace(process.cwd());
   const result = await buildSite({
@@ -72,7 +92,7 @@ async function build(): Promise<void> {
     workspace,
   });
 
-  console.log(`Built ${result.files.length} files into dist/.`);
+  return `Built ${result.files.length} files into dist/.`;
 }
 
 async function listSkills(): Promise<void> {
@@ -93,6 +113,42 @@ async function listSkills(): Promise<void> {
     if (skill.error) {
       console.log(`  error: ${skill.error}`);
     }
+  }
+}
+
+async function runInteractiveHarness(): Promise<void> {
+  console.log(await buildText());
+
+  const app = createHarnessApp({ root: process.cwd() });
+  const port = Number(process.env.REEF_PORT ?? 3000);
+  const server = Bun.serve({
+    port,
+    fetch: app.fetch,
+  });
+
+  console.log(`Serving site at http://localhost:${server.port}`);
+  console.log("Type a prompt, /build, or /exit.");
+
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: process.stdout.isTTY,
+  });
+
+  try {
+    await runCliHarness({
+      prompts: readline,
+      output: process.stdout,
+      runPrompt: runPromptText,
+      runBuild: buildText,
+      spinnerFactory: (label) =>
+        createSpinner(label, {
+          enabled: process.stderr.isTTY,
+        }),
+    });
+  } finally {
+    readline.close();
+    server.stop();
   }
 }
 

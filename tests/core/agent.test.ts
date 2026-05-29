@@ -123,10 +123,195 @@ describe("runAgentOnce", () => {
       },
     ]);
   });
+
+  test("includes prior chat history before the current prompt", async () => {
+    let requestBody: { messages: { role: string; content: unknown }[] } | null = null;
+
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body));
+      return jsonResponse({
+        content: [{ type: "text", text: "second answer" }],
+      });
+    }) as typeof fetch;
+
+    await runAgentOnce({
+      prompt: "make it warmer",
+      model: "claude-test",
+      anthropicApiKey: "test-key",
+      skills: [],
+      history: [
+        { role: "user", content: "make it a notebook" },
+        { role: "assistant", content: "Done. I updated the theme." },
+      ],
+    });
+
+    expect(requestBody?.messages).toEqual([
+      { role: "user", content: "make it a notebook" },
+      { role: "assistant", content: "Done. I updated the theme." },
+      { role: "user", content: "make it warmer" },
+    ]);
+  });
+
+  test("emits observable tool events without exposing model internals", async () => {
+    const events: unknown[] = [];
+    let requestCount = 0;
+
+    globalThis.fetch = (async () => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        return jsonResponse({
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "alpha_ping",
+              input: { value: "hello" },
+            },
+          ],
+        });
+      }
+
+      return jsonResponse({
+        content: [{ type: "text", text: "done" }],
+      });
+    }) as typeof fetch;
+
+    await runAgentOnce({
+      prompt: "ping alpha",
+      model: "claude-test",
+      anthropicApiKey: "test-key",
+      skills: [
+        loadedSkill({
+          name: "alpha",
+          toolRun: async () => "pong",
+        }),
+      ],
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(events).toEqual([
+      { type: "phase", message: "Asking model" },
+      { type: "tool_start", name: "alpha_ping", input: { value: "hello" } },
+      { type: "tool_result", name: "alpha_ping", result: "pong" },
+      { type: "phase", message: "Asking model" },
+    ]);
+  });
+
+  test("blocks publish tools when the current prompt does not ask to publish", async () => {
+    let toolRan = false;
+    let requestCount = 0;
+    const toolResults: unknown[] = [];
+    const events: unknown[] = [];
+
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      requestCount += 1;
+      const body = JSON.parse(String(init?.body));
+
+      if (requestCount === 1) {
+        return jsonResponse({
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_publish",
+              name: "github-pages_publish_site",
+              input: {},
+            },
+          ],
+        });
+      }
+
+      toolResults.push(body.messages.at(-1).content[0]);
+      return jsonResponse({
+        content: [{ type: "text", text: "I updated the local design only." }],
+      });
+    }) as typeof fetch;
+
+    const result = await runAgentOnce({
+      prompt: "change the design completely and make it fun and colorful",
+      model: "claude-test",
+      anthropicApiKey: "test-key",
+      skills: [
+        loadedSkill({
+          name: "github-pages",
+          toolName: "publish_site",
+          toolRun: async () => {
+            toolRan = true;
+            return "published";
+          },
+        }),
+      ],
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(result).toBe("I updated the local design only.");
+    expect(toolRan).toBe(false);
+    expect(toolResults).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: "toolu_publish",
+        content:
+          "Blocked github-pages_publish_site. Publishing requires an explicit publish/deploy/push request in the current prompt.",
+        is_error: true,
+      },
+    ]);
+    expect(events).toContainEqual({
+      type: "tool_error",
+      name: "github-pages_publish_site",
+      error:
+        "Blocked github-pages_publish_site. Publishing requires an explicit publish/deploy/push request in the current prompt.",
+    });
+  });
+
+  test("allows publish tools when the current prompt asks to publish", async () => {
+    let toolRan = false;
+    let requestCount = 0;
+
+    globalThis.fetch = (async () => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        return jsonResponse({
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_publish",
+              name: "github-pages_publish_site",
+              input: {},
+            },
+          ],
+        });
+      }
+
+      return jsonResponse({
+        content: [{ type: "text", text: "Published." }],
+      });
+    }) as typeof fetch;
+
+    const result = await runAgentOnce({
+      prompt: "publish my site to github pages",
+      model: "claude-test",
+      anthropicApiKey: "test-key",
+      skills: [
+        loadedSkill({
+          name: "github-pages",
+          toolName: "publish_site",
+          toolRun: async () => {
+            toolRan = true;
+            return "published";
+          },
+        }),
+      ],
+    });
+
+    expect(result).toBe("Published.");
+    expect(toolRan).toBe(true);
+  });
 });
 
 function loadedSkill(input: {
   name: string;
+  toolName?: string;
   toolRun: (input: unknown) => Promise<string | { text: string }>;
 }): LoadedSkill {
   return {
@@ -140,7 +325,7 @@ function loadedSkill(input: {
     },
     tools: [
       {
-        name: "ping",
+        name: input.toolName ?? "ping",
         description: "Ping test tool.",
         inputSchema: {
           type: "object",

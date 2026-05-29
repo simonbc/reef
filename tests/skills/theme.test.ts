@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import theme from "../../skills/theme";
 import type { ToolContext, WorkspaceAPI } from "../../src/skill-api";
+import { createWorkspace } from "../../src/core/workspace";
 
 const roots: string[] = [];
 
@@ -15,7 +16,7 @@ describe("theme skill", () => {
   test("reads default theme files when none exist yet", async () => {
     const root = await tempRoot();
 
-    const result = String(await tool("read").run({}, context(root)));
+    const result = String(await tool("read").run({}, await context(root)));
 
     expect(result).toContain("theme/layout.html");
     expect(result).toContain("{{content}}");
@@ -25,29 +26,37 @@ describe("theme skill", () => {
 
   test("updates canonical CSS", async () => {
     const root = await tempRoot();
+    await writePost(root);
 
     const result = await tool("update_css").run(
       { css: "body { background: papayawhip; }\n" },
-      context(root),
+      await context(root),
     );
 
-    expect(result).toBe("Updated theme/styles.css.");
+    expect(result).toBe("Updated theme/styles.css and rebuilt dist/.");
     await expect(readFile(join(root, "theme", "styles.css"), "utf8")).resolves.toBe(
+      "body { background: papayawhip; }\n",
+    );
+    await expect(readFile(join(root, "dist", "styles.css"), "utf8")).resolves.toBe(
       "body { background: papayawhip; }\n",
     );
   });
 
   test("updates canonical layout", async () => {
     const root = await tempRoot();
+    await writePost(root);
 
     const result = await tool("update_layout").run(
       { html: "<main>{{content}}</main>\n" },
-      context(root),
+      await context(root),
     );
 
-    expect(result).toBe("Updated theme/layout.html.");
+    expect(result).toBe("Updated theme/layout.html and rebuilt dist/.");
     await expect(readFile(join(root, "theme", "layout.html"), "utf8")).resolves.toBe(
       "<main>{{content}}</main>\n",
+    );
+    await expect(readFile(join(root, "dist", "index.html"), "utf8")).resolves.toContain(
+      "<main><section>",
     );
   });
 });
@@ -60,18 +69,24 @@ function tool(name: string) {
   return found;
 }
 
-function context(root: string): ToolContext {
+async function context(root: string): Promise<ToolContext> {
   return {
     config: {},
     secrets: {},
-    workspace: {
-      root,
-    } as Partial<WorkspaceAPI> as WorkspaceAPI,
+    workspace: await createWorkspace(root),
   };
 }
 
 async function tempRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "reef-theme-"));
   roots.push(root);
+  await Bun.write(join(root, "posts", ".keep"), "");
   return root;
+}
+
+async function writePost(root: string): Promise<void> {
+  await writeFile(
+    join(root, "posts", "hello.md"),
+    "---\ntitle: Hello\ndate: 2026-05-29\n---\n\n# Hello\n\nBody.",
+  );
 }
