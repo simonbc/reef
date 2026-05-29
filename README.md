@@ -130,6 +130,14 @@ export REEF_WORDPRESS_APP_PASSWORD='xxxx xxxx xxxx xxxx xxxx xxxx'
 export REEF_MASTODON_ACCESS_TOKEN='...'
 ```
 
+After a post is published to WordPress, Reef stores the returned WordPress post
+id in local skill state. Later edits to the markdown source can update the same
+WordPress post:
+
+```sh
+bun run reef "update posts/hello.md on wordpress"
+```
+
 GitHub Pages publishing expects `dist/` to exist and reads its target repository
 from `[github-pages].repo` in merged config. `[github-pages].branch` defaults to
 `gh-pages` when omitted:

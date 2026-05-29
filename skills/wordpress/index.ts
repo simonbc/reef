@@ -9,6 +9,11 @@ type PublishInput = {
   status: "draft" | "publish";
 };
 
+type UpdateInput = {
+  path: string;
+  status?: "draft" | "publish";
+};
+
 type SetupInput = {
   location: "global" | "project";
 };
@@ -19,6 +24,7 @@ export default defineSkill({
     [
       "WordPress publishing uses the WordPress REST API.",
       "Publish only when the user asks to publish or create a draft.",
+      "Use wordpress_update_post when the user asks to update, edit, republish, or sync a local post that Reef previously published to WordPress.",
       "WordPress configuration uses [wordpress].url, username, and app_password, or the REEF_WORDPRESS_USERNAME and REEF_WORDPRESS_APP_PASSWORD environment variables.",
       "If you mention fallback environment variables, use the exact name REEF_WP_URL.",
       "If WordPress is not configured, ask whether to create a fill-in config template. Use wordpress_setup_config when the user asks to set up WordPress or agrees to create the template.",
@@ -83,36 +89,108 @@ export default defineSkill({
           return `Post not found: ${path}`;
         }
 
-        const url = configString(ctx.config.url) ?? process.env.REEF_WP_URL;
-        const usernameEnv = configString(ctx.config.username_env) ?? "REEF_WORDPRESS_USERNAME";
-        const appPasswordEnv =
-          configString(ctx.config.app_password_env) ?? "REEF_WORDPRESS_APP_PASSWORD";
-        const username =
-          ctx.secrets.username ?? configString(ctx.config.username) ?? process.env[usernameEnv];
-        const appPassword =
-          ctx.secrets.app_password ??
-          configString(ctx.config.app_password) ??
-          process.env[appPasswordEnv];
-
-        if (!url || !username || !appPassword) {
-          return wordpressConfigMessage();
+        const config = wordpressConfig(ctx.config, ctx.secrets);
+        if (!config.ok) {
+          return config.message;
         }
 
         const post = parseMarkdown(markdown, path);
-        const link = await publishToWordPress({
-          url,
-          username,
-          appPassword,
+        const published = await publishToWordPress({
+          url: config.url,
+          username: config.username,
+          appPassword: config.appPassword,
           title: post.title ?? path,
           html: post.html,
           status: parsed.status,
         });
+        await ctx.workspace.skillState.write("wordpress", stateKey(path), {
+          id: published.id,
+          url: published.url,
+        });
 
-        return `Published ${path} to WordPress as ${parsed.status}: ${link}`;
+        return `Published ${path} to WordPress as ${parsed.status}: ${published.url}`;
+      },
+    }),
+    defineTool({
+      name: "update_post",
+      description:
+        "Update a previously published WordPress post from a local markdown post. Requires that the post was first published by Reef and has a recorded WordPress post id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Post slug or path, for example hello or posts/hello.md.",
+          },
+          status: {
+            type: "string",
+            enum: ["draft", "publish"],
+            description:
+              "Optional WordPress status change. Omit this when only updating content.",
+          },
+        },
+        required: ["path"],
+      },
+      run: async (input, ctx) => {
+        const parsed = parseUpdateInput(input);
+        const path = await resolvePostPath(parsed.path, ctx);
+        const markdown = await ctx.workspace.readPost(path);
+        if (!markdown) {
+          return `Post not found: ${path}`;
+        }
+
+        const state = await ctx.workspace.skillState.read("wordpress", stateKey(path));
+        if (!isPublishedState(state)) {
+          return `No WordPress post is recorded for ${path}. Publish it to WordPress first.`;
+        }
+
+        const config = wordpressConfig(ctx.config, ctx.secrets);
+        if (!config.ok) {
+          return config.message;
+        }
+
+        const post = parseMarkdown(markdown, path);
+        const updated = await updateWordPressPost({
+          url: config.url,
+          username: config.username,
+          appPassword: config.appPassword,
+          id: state.id,
+          title: post.title ?? path,
+          html: post.html,
+          status: parsed.status,
+        });
+        await ctx.workspace.skillState.write("wordpress", stateKey(path), {
+          id: updated.id,
+          url: updated.url,
+        });
+
+        return `Updated ${path} on WordPress: ${updated.url}`;
       },
     }),
   ],
 });
+
+function wordpressConfig(
+  config: Record<string, unknown>,
+  secrets: Record<string, string>,
+):
+  | { ok: true; url: string; username: string; appPassword: string }
+  | { ok: false; message: string } {
+  const url = configString(config.url) ?? process.env.REEF_WP_URL;
+  const usernameEnv = configString(config.username_env) ?? "REEF_WORDPRESS_USERNAME";
+  const appPasswordEnv =
+    configString(config.app_password_env) ?? "REEF_WORDPRESS_APP_PASSWORD";
+  const username =
+    secrets.username ?? configString(config.username) ?? process.env[usernameEnv];
+  const appPassword =
+    secrets.app_password ?? configString(config.app_password) ?? process.env[appPasswordEnv];
+
+  if (!url || !username || !appPassword) {
+    return { ok: false, message: wordpressConfigMessage() };
+  }
+
+  return { ok: true, url, username, appPassword };
+}
 
 function wordpressConfigMessage(): string {
   return [
@@ -193,6 +271,23 @@ function parsePublishInput(input: unknown): PublishInput {
   };
 }
 
+function parseUpdateInput(input: unknown): UpdateInput {
+  if (!input || typeof input !== "object") {
+    throw new Error("Tool input must be an object.");
+  }
+
+  const record = input as Record<string, unknown>;
+  if (typeof record.path !== "string" || record.path.trim() === "") {
+    throw new Error("Tool input requires path.");
+  }
+
+  return {
+    path: record.path.trim(),
+    status:
+      record.status === "draft" || record.status === "publish" ? record.status : undefined,
+  };
+}
+
 async function resolvePostPath(
   path: string,
   ctx: { workspace: { listPosts(): Promise<{ path: string }[]> } },
@@ -213,7 +308,7 @@ async function publishToWordPress(input: {
   title: string;
   html: string;
   status: "draft" | "publish";
-}): Promise<string> {
+}): Promise<{ id: string; url: string }> {
   const baseUrl = input.url.replace(/\/+$/, "");
   const endpoint = `${baseUrl}/wp-json/wp/v2/posts`;
   const credentials = btoa(`${input.username}:${input.appPassword}`);
@@ -236,9 +331,71 @@ async function publishToWordPress(input: {
     throw new Error(`WordPress API error ${response.status}: ${JSON.stringify(json)}`);
   }
 
-  return typeof json.link === "string" ? json.link : "(no link returned)";
+  return wordpressPostResult(json, "");
+}
+
+async function updateWordPressPost(input: {
+  url: string;
+  username: string;
+  appPassword: string;
+  id: string;
+  title: string;
+  html: string;
+  status?: "draft" | "publish";
+}): Promise<{ id: string; url: string }> {
+  const baseUrl = input.url.replace(/\/+$/, "");
+  const endpoint = `${baseUrl}/wp-json/wp/v2/posts/${input.id}`;
+  const credentials = btoa(`${input.username}:${input.appPassword}`);
+  const body: Record<string, unknown> = {
+    title: input.title,
+    content: input.html,
+  };
+
+  if (input.status) {
+    body.status = input.status;
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      authorization: `Basic ${credentials}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(`WordPress API error ${response.status}: ${JSON.stringify(json)}`);
+  }
+
+  return wordpressPostResult(json, input.id);
 }
 
 function configString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function wordpressPostResult(json: unknown, fallbackId: string): { id: string; url: string } {
+  const record = typeof json === "object" && json ? (json as Record<string, unknown>) : {};
+  return {
+    id:
+      typeof record.id === "number" || typeof record.id === "string"
+        ? String(record.id)
+        : fallbackId,
+    url: typeof record.link === "string" ? record.link : "(no link returned)",
+  };
+}
+
+function stateKey(path: string): string {
+  return `post:${path.replace(/^posts\//, "").replace(/\.md$/, "")}`;
+}
+
+function isPublishedState(value: unknown): value is { id: string; url: string } {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).id === "string" &&
+    typeof (value as Record<string, unknown>).url === "string"
+  );
 }

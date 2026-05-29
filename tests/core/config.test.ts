@@ -13,8 +13,9 @@ afterEach(async () => {
 describe("loadConfig", () => {
   test("returns feed-first local defaults when reef.toml is absent", async () => {
     const root = await tempRoot("my-blog-");
+    const home = await tempRoot("reef-empty-home-");
 
-    await expect(loadConfig(root)).resolves.toEqual({
+    await expect(loadConfig(root, { globalConfigPath: join(home, "config.toml") })).resolves.toEqual({
       root,
       title: root.split("/").at(-1),
       domain: "",

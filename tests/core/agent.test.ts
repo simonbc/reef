@@ -251,7 +251,7 @@ describe("runAgentOnce", () => {
         type: "tool_result",
         tool_use_id: "toolu_publish",
         content:
-          "Blocked github-pages_publish_site. Publishing requires an explicit publish/deploy/push request in the current prompt.",
+          "Blocked github-pages_publish_site. Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
         is_error: true,
       },
     ]);
@@ -259,7 +259,7 @@ describe("runAgentOnce", () => {
       type: "tool_error",
       name: "github-pages_publish_site",
       error:
-        "Blocked github-pages_publish_site. Publishing requires an explicit publish/deploy/push request in the current prompt.",
+        "Blocked github-pages_publish_site. Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
     });
   });
 
@@ -350,6 +350,51 @@ describe("runAgentOnce", () => {
     });
 
     expect(result).toBe("Posted.");
+    expect(toolRan).toBe(true);
+  });
+
+  test("allows update tools when the current prompt asks to update a platform", async () => {
+    let toolRan = false;
+    let requestCount = 0;
+
+    globalThis.fetch = (async () => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        return jsonResponse({
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_update",
+              name: "wordpress_update_post",
+              input: { path: "1" },
+            },
+          ],
+        });
+      }
+
+      return jsonResponse({
+        content: [{ type: "text", text: "Updated." }],
+      });
+    }) as typeof fetch;
+
+    const result = await runAgentOnce({
+      prompt: "i updated post 1, update it on wordpress",
+      model: "claude-test",
+      anthropicApiKey: "test-key",
+      skills: [
+        loadedSkill({
+          name: "wordpress",
+          toolName: "update_post",
+          toolRun: async () => {
+            toolRan = true;
+            return "updated";
+          },
+        }),
+      ],
+    });
+
+    expect(result).toBe("Updated.");
     expect(toolRan).toBe(true);
   });
 });

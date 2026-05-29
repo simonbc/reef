@@ -102,10 +102,10 @@ export async function runAgentOnce(input: {
         continue;
       }
 
-      if (isPublishTool(toolUse.name) && !hasPublishIntent(input.prompt)) {
+      if (isRemoteWriteTool(toolUse.name) && !hasRemoteWriteIntent(input.prompt)) {
         const errorMessage = [
           `Blocked ${toolUse.name}.`,
-          "Publishing requires an explicit publish/deploy/push request in the current prompt.",
+          "Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
         ].join(" ");
         input.onEvent?.({
           type: "tool_error",
@@ -233,12 +233,12 @@ function toolResultText(result: ToolResult): string {
   return typeof result === "string" ? result : result.text;
 }
 
-function isPublishTool(name: string): boolean {
-  return /\bpublish\b|publish_|_publish|deploy|push/.test(name);
+function isRemoteWriteTool(name: string): boolean {
+  return /\bpublish\b|publish_|_publish|deploy|push|\bupdate\b|update_|_update/.test(name);
 }
 
-function hasPublishIntent(prompt: string): boolean {
-  return /\b(publish|deploy|push|ship|post\s+to|send\s+to|upload|create\s+(a\s+)?remote\s+draft|create\s+(a\s+)?draft)\b/i.test(
+function hasRemoteWriteIntent(prompt: string): boolean {
+  return /\b(publish|deploy|push|ship|post\s+to|send\s+to|upload|update|republish|sync|create\s+(a\s+)?remote\s+draft|create\s+(a\s+)?draft)\b/i.test(
     prompt,
   ) || /\bpost\b.{0,80}\bto\b/i.test(prompt);
 }

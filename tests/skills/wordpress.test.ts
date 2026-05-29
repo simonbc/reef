@@ -19,6 +19,7 @@ afterEach(async () => {
 describe("wordpress skill", () => {
   test("publishes markdown posts to the WordPress posts endpoint", async () => {
     const requests: { url: string; init?: RequestInit; body: Record<string, unknown> }[] = [];
+    const stateWrites: { key: string; value: unknown }[] = [];
 
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({
@@ -26,7 +27,7 @@ describe("wordpress skill", () => {
         init,
         body: JSON.parse(String(init?.body)),
       });
-      return new Response(JSON.stringify({ link: "https://example.com/hello/" }), {
+      return new Response(JSON.stringify({ id: 123, link: "https://example.com/hello/" }), {
         status: 201,
         headers: { "content-type": "application/json" },
       });
@@ -38,6 +39,7 @@ describe("wordpress skill", () => {
         config: { url: "https://example.wordpress.com/" },
         secrets: { username: "simon", app_password: "app-pass" },
         markdown: "---\ntitle: Hello\n---\n\n# Hello\n\nBody",
+        stateWrites,
       }),
     );
 
@@ -52,6 +54,15 @@ describe("wordpress skill", () => {
       authorization: `Basic ${btoa("simon:app-pass")}`,
       "content-type": "application/json",
     });
+    expect(stateWrites).toEqual([
+      {
+        key: "post:hello",
+        value: {
+          id: "123",
+          url: "https://example.com/hello/",
+        },
+      },
+    ]);
   });
 
   test("publishes numbered post selections from the current post list", async () => {
@@ -82,6 +93,77 @@ describe("wordpress skill", () => {
       "Published posts/hello.md to WordPress as publish: https://example.com/hello/",
     );
     expect(readPaths).toEqual(["posts/hello.md"]);
+  });
+
+  test("updates a previously published WordPress post from markdown", async () => {
+    const requests: { url: string; init?: RequestInit; body: Record<string, unknown> }[] = [];
+    const stateWrites: { key: string; value: unknown }[] = [];
+
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        url: String(url),
+        init,
+        body: JSON.parse(String(init?.body)),
+      });
+      return new Response(JSON.stringify({ id: 123, link: "https://example.com/hello/" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const result = await tool("update_post").run(
+      { path: "1" },
+      context({
+        config: { url: "https://example.wordpress.com/" },
+        secrets: { username: "simon", app_password: "app-pass" },
+        posts: [{ slug: "hello", path: "posts/hello.md", title: "Hello" }],
+        markdown: "# Hello updated\n\nEdited body.",
+        state: {
+          "post:hello": {
+            id: "123",
+            url: "https://example.com/hello/",
+          },
+        },
+        stateWrites,
+      }),
+    );
+
+    expect(result).toBe("Updated posts/hello.md on WordPress: https://example.com/hello/");
+    expect(requests[0].url).toBe("https://example.wordpress.com/wp-json/wp/v2/posts/123");
+    expect(requests[0].init?.method).toBe("POST");
+    expect(requests[0].body).toMatchObject({
+      title: "Hello updated",
+      content: expect.stringContaining("<p>Edited body.</p>"),
+    });
+    expect(requests[0].body).not.toHaveProperty("status");
+    expect(stateWrites).toEqual([
+      {
+        key: "post:hello",
+        value: {
+          id: "123",
+          url: "https://example.com/hello/",
+        },
+      },
+    ]);
+  });
+
+  test("reports when a post has not been published to WordPress before update", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("fetch should not be called");
+    }) as typeof fetch;
+
+    const result = await tool("update_post").run(
+      { path: "hello" },
+      context({
+        config: { url: "https://example.wordpress.com/" },
+        secrets: { username: "simon", app_password: "app-pass" },
+        markdown: "# Hello",
+      }),
+    );
+
+    expect(result).toBe(
+      "No WordPress post is recorded for hello. Publish it to WordPress first.",
+    );
   });
 
   test("publishes with credentials filled into config", async () => {
@@ -184,6 +266,8 @@ function context(input: {
   posts?: Awaited<ReturnType<WorkspaceAPI["listPosts"]>>;
   markdown: string | null;
   readPost?: WorkspaceAPI["readPost"];
+  state?: Record<string, unknown>;
+  stateWrites?: { key: string; value: unknown }[];
 }): ToolContext {
   return {
     config: input.config,
@@ -191,6 +275,12 @@ function context(input: {
     workspace: {
       listPosts: async () => input.posts ?? [],
       readPost: input.readPost ?? (async () => input.markdown),
+      skillState: {
+        read: async (_skillName, key) => input.state?.[key] ?? null,
+        write: async (_skillName, key, value) => {
+          input.stateWrites?.push({ key, value });
+        },
+      },
     } as Partial<WorkspaceAPI> as WorkspaceAPI,
   };
 }
