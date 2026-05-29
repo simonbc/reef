@@ -1,7 +1,7 @@
 {
   "name": "reef",
   "version": "0.0.0",
-  "private": true,
+  "description": "Local programmable runtime for publishing markdown to the social web.",
   "type": "module",
   "bin": {
     "reef": "./bin/reef.ts"

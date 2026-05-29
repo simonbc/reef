@@ -2,6 +2,22 @@
 
 Local programmable runtime for publishing markdown to the social web.
 
+## Install
+
+Install directly from GitHub with Bun:
+
+```sh
+bun install -g github:simonbc/reef
+```
+
+Then run Reef from any runtime directory:
+
+```sh
+reef
+reef skill list
+reef build
+```
+
 ## Run
 
 ```sh
