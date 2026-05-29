@@ -62,6 +62,47 @@ describe("buildSite", () => {
       ],
     });
   });
+
+  test("uses canonical theme files when present", async () => {
+    const root = await tempRoot();
+    await writeFile(
+      join(root, "posts", "hello.md"),
+      "---\ntitle: Hello\ndate: 2026-05-29\n---\n\n# Hello\n\nFirst post.",
+    );
+    await Bun.write(
+      join(root, "theme", "layout.html"),
+      [
+        "<!doctype html>",
+        "<html>",
+        "<head>",
+        "<title>{{title}}</title>",
+        '<link rel="stylesheet" href="/styles.css">',
+        "</head>",
+        '<body class="custom-theme">',
+        "<header>{{siteTitle}}</header>",
+        "<main>{{content}}</main>",
+        "</body>",
+        "</html>",
+      ].join("\n"),
+    );
+    await Bun.write(join(root, "theme", "styles.css"), "body { background: papayawhip; }\n");
+
+    await buildSite({
+      title: "Custom Reef",
+      domain: "https://example.com",
+      workspace: await createWorkspace(root),
+    });
+
+    await expect(readFile(join(root, "dist", "index.html"), "utf8")).resolves.toContain(
+      'body class="custom-theme"',
+    );
+    await expect(readFile(join(root, "dist", "index.html"), "utf8")).resolves.toContain(
+      "<header>Custom Reef</header>",
+    );
+    await expect(readFile(join(root, "dist", "styles.css"), "utf8")).resolves.toBe(
+      "body { background: papayawhip; }\n",
+    );
+  });
 });
 
 async function tempRoot(): Promise<string> {

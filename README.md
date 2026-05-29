@@ -9,6 +9,7 @@ bun run reef skill list
 bun run reef build
 bun run reef "publish posts/hello.md to my wordpress"
 bun run reef "publish my site to github pages"
+bun run reef "make the site feel like a clean personal notebook"
 ```
 
 ## Configuration
@@ -63,4 +64,31 @@ from merged config:
 ```sh
 bun run reef build
 bun run reef "publish my site to github pages"
+```
+
+## Theme
+
+Design source lives in canonical theme files:
+
+```text
+theme/layout.html
+theme/styles.css
+```
+
+`reef build` uses those files when present. If they do not exist, Reef uses a
+small default theme.
+
+The theme skill can read or replace them through prompts:
+
+```sh
+bun run reef "show me the current theme"
+bun run reef "make the site feel like a clean personal notebook"
+bun run reef "make the background warm and the post list more spacious"
+```
+
+After changing the theme:
+
+```sh
+bun run reef build
+open dist/index.html
 ```

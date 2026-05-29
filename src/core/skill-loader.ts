@@ -23,10 +23,11 @@ export async function loadSkills(input: {
     input.builtInSkillsDir ?? defaultBuiltInSkillsDir(),
     resolve(input.config.root, "skills"),
   ];
+  const uniqueSkillRoots = [...new Set(skillRoots.map((root) => resolve(root)))];
   const loaded: LoadedSkill[] = [];
   const seenNames = new Set<string>();
 
-  for (const { root, dirName } of await readSkillDirs(skillRoots)) {
+  for (const { root, dirName } of await readSkillDirs(uniqueSkillRoots)) {
     const skillDir = join(root, dirName);
     const manifestPath = join(skillDir, "skill.toml");
     const indexPath = join(skillDir, "index.ts");

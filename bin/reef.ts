@@ -4,6 +4,8 @@ import { runAgentOnce } from "../src/core/agent";
 import { buildSite } from "../src/core/build";
 import { loadConfig } from "../src/core/config";
 import { loadSkills } from "../src/core/skill-loader";
+import { createSpinner } from "../src/core/spinner";
+import { renderTerminalMarkdown } from "../src/core/terminal-markdown";
 import { createWorkspace } from "../src/core/workspace";
 
 const args = process.argv.slice(2);
@@ -37,15 +39,27 @@ async function runPrompt(prompt: string): Promise<void> {
   const workspace = await createWorkspace(process.cwd());
   const skills = await loadSkills({ config, workspace });
 
-  const result = await runAgentOnce({
-    prompt,
-    skills,
-    anthropicApiKey: process.env[config.anthropicKeyEnv],
-    model: process.env.CLAUDE_MODEL ?? "claude-opus-4-7",
+  const spinner = createSpinner("Thinking", {
+    enabled: process.stderr.isTTY,
   });
+  spinner.start();
+
+  let result = "";
+  try {
+    result = await runAgentOnce({
+      prompt,
+      skills,
+      anthropicApiKey: process.env[config.anthropicKeyEnv],
+      model: process.env.CLAUDE_MODEL ?? "claude-opus-4-7",
+    });
+    spinner.stop();
+  } catch (error) {
+    spinner.stop("Stopped");
+    throw error;
+  }
 
   if (result.trim()) {
-    console.log(result);
+    console.log(renderTerminalMarkdown(result, { colors: process.stdout.isTTY }));
   }
 }
 

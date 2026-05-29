@@ -333,8 +333,24 @@ explicit unpublish/remove tools.
 
 Themes are optional rendering layers used primarily for website outputs.
 
-Themes are not canonical source. Do not let theme implementation leak into the
-source model for posts/pages.
+Theme files are canonical design source:
+
+```text
+theme/layout.html
+theme/styles.css
+```
+
+`dist/` is generated output and should not be edited directly. Do not let theme
+implementation leak into the source model for posts/pages.
+
+Current theme placeholders:
+
+- `{{title}}`
+- `{{siteTitle}}`
+- `{{heading}}`
+- `{{content}}`
+
+`theme/layout.html` must include `{{content}}`.
 
 ## Architecture Boundaries
 
@@ -345,6 +361,7 @@ Current source layout:
 - `src/skill-api/`: public API for skills
 - `skills/`: built-in skills using the same shape as third-party skills
 - `posts/`, `pages/`, `media/`: workspace content
+- `theme/layout.html`, `theme/styles.css`: canonical design source
 
 Keep `src/skill-api/` small and stable. If a helper is only needed by one skill,
 put it in that skill or `src/core/` until a second real use appears.

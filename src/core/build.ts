@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { WorkspaceAPI } from "../skill-api";
 import { parseMarkdown } from "./markdown";
+import { readTheme, renderLayout } from "./theme";
 
 export type BuildInput = {
   title: string;
@@ -35,15 +36,18 @@ export async function buildSite(input: BuildInput): Promise<BuildResult> {
 
   const posts = await renderPosts(input.workspace);
   const pages = await renderPages(input.workspace);
+  const theme = await readTheme(input.workspace.root);
   const files: string[] = [];
 
   await writeDistFile(
     input.workspace.root,
     "dist/index.html",
-    layout({
+    renderLayout({
+      layout: theme.layout,
       title: input.title,
+      siteTitle: input.title,
       heading: input.title,
-      body: renderHome({ posts, pages }),
+      content: renderHome({ posts, pages }),
     }),
     files,
   );
@@ -52,10 +56,12 @@ export async function buildSite(input: BuildInput): Promise<BuildResult> {
     await writeDistFile(
       input.workspace.root,
       `dist/posts/${post.slug}/index.html`,
-      layout({
+      renderLayout({
+        layout: theme.layout,
         title: `${post.title} - ${input.title}`,
+        siteTitle: input.title,
         heading: post.title,
-        body: `<article>${post.html}</article>`,
+        content: `<article>${post.html}</article>`,
       }),
       files,
     );
@@ -65,17 +71,19 @@ export async function buildSite(input: BuildInput): Promise<BuildResult> {
     await writeDistFile(
       input.workspace.root,
       `dist/pages/${page.slug}/index.html`,
-      layout({
+      renderLayout({
+        layout: theme.layout,
         title: `${page.title} - ${input.title}`,
+        siteTitle: input.title,
         heading: page.title,
-        body: `<article>${page.html}</article>`,
+        content: `<article>${page.html}</article>`,
       }),
       files,
     );
   }
 
   await writeDistFile(input.workspace.root, "dist/feed.json", feedJson(input, posts), files);
-  await writeDistFile(input.workspace.root, "dist/styles.css", stylesheet(), files);
+  await writeDistFile(input.workspace.root, "dist/styles.css", theme.css, files);
 
   return { files };
 }
@@ -176,40 +184,6 @@ function feedJson(input: BuildInput, posts: RenderedPost[]): string {
   };
 
   return `${JSON.stringify(feed, null, 2)}\n`;
-}
-
-function layout(input: { title: string; heading: string; body: string }): string {
-  return [
-    "<!doctype html>",
-    '<html lang="en">',
-    "<head>",
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    `<title>${escapeHtml(input.title)}</title>`,
-    '<link rel="stylesheet" href="/styles.css">',
-    "</head>",
-    "<body>",
-    "<main>",
-    `<h1>${escapeHtml(input.heading)}</h1>`,
-    input.body,
-    "</main>",
-    "</body>",
-    "</html>",
-    "",
-  ].join("\n");
-}
-
-function stylesheet(): string {
-  return [
-    ":root { color-scheme: light dark; font-family: ui-serif, Georgia, serif; }",
-    "body { margin: 0; line-height: 1.55; }",
-    "main { max-width: 720px; margin: 0 auto; padding: 48px 20px; }",
-    "a { color: currentColor; text-decoration-thickness: 1px; text-underline-offset: 3px; }",
-    ".feed { padding-left: 1.2rem; }",
-    ".feed li { margin: 0.5rem 0; }",
-    "time { color: #666; font-size: 0.9rem; }",
-    "",
-  ].join("\n");
 }
 
 function escapeHtml(value: string): string {
