@@ -1,9 +1,11 @@
-import { access, cp, mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { defineSkill, defineTool } from "../../src/skill-api";
 
 type GitRunner = (args: string[], cwd: string) => Promise<string>;
+type SetupInput = { location: "global" | "project" };
 
 export default defineSkill({
   name: "github-pages",
@@ -13,8 +15,40 @@ export default defineSkill({
       "Use github-pages_publish_site only when the user explicitly asks to publish, deploy, or push to GitHub Pages.",
       "If the site has changed and dist/ may be stale, build the site before publishing.",
       "GitHub Pages configuration uses [github-pages].repo and optional [github-pages].branch.",
+      "Use github-pages_setup_config when the user asks to set up GitHub Pages or agrees to create the template.",
     ].join(" "),
   tools: [
+    defineTool({
+      name: "setup_config",
+      description:
+        "Create a fill-in GitHub Pages config template. Defaults to ~/.reef/config.toml so it can be reused across Reef projects.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            enum: ["global", "project"],
+            description:
+              "Where to write the template. Use global for ~/.reef/config.toml; use project for ./reef.toml.",
+          },
+        },
+      },
+      run: async (input, ctx) => {
+        const parsed = parseSetupInput(input);
+        const target = githubPagesConfigPath(ctx, parsed.location);
+        const existing = await readOptionalFile(target);
+        if (/\[github-pages\]/.test(existing)) {
+          return `GitHub Pages config already exists in ${target}. Fill in the values there.`;
+        }
+
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, appendGithubPagesTemplate(existing));
+        return [
+          `Created GitHub Pages config template in ${target}.`,
+          "Fill in [github-pages].repo and branch, then try publishing again.",
+        ].join(" ");
+      },
+    }),
     defineTool({
       name: "publish_site",
       description:
@@ -59,6 +93,47 @@ export default defineSkill({
     }),
   ],
 });
+
+function parseSetupInput(input: unknown): SetupInput {
+  if (!input || typeof input !== "object") {
+    return { location: "global" };
+  }
+
+  const location = (input as Record<string, unknown>).location;
+  return {
+    location: location === "project" ? "project" : "global",
+  };
+}
+
+function githubPagesConfigPath(
+  ctx: { config: Record<string, unknown>; workspace: { root: string } },
+  location: "global" | "project",
+): string {
+  if (location === "project") {
+    return join(ctx.workspace.root, "reef.toml");
+  }
+
+  return configString(ctx.config.__global_config_path) ?? join(homedir(), ".reef", "config.toml");
+}
+
+async function readOptionalFile(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function appendGithubPagesTemplate(existing: string): string {
+  const template = [
+    "[github-pages]",
+    'repo = "git@github.com:you/you.github.io.git"',
+    'branch = "gh-pages"',
+    "",
+  ].join("\n");
+
+  return existing.trim() ? `${existing.replace(/\s*$/, "\n\n")}${template}` : template;
+}
 
 function githubPagesConfigMessage(): string {
   return [

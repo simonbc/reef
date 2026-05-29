@@ -54,7 +54,7 @@ try {
     process.exit(0);
   }
 
-  if (command === "publish" || command === "update") {
+  if (command === "publish" || command === "update" || command === "setup") {
     await platformCommand(command, args.slice(1));
     process.exit(0);
   }
@@ -179,6 +179,7 @@ async function platformCommand(action: SkillCommandAction, args: string[]): Prom
     ref,
     status: wordpressStatus(args),
     visibility: mastodonVisibility(args),
+    location: setupLocation(args),
   };
   const config = await loadConfig(process.cwd());
   const workspace = await createWorkspace(process.cwd());
@@ -238,6 +239,16 @@ function mastodonVisibility(
   return value === "public" || value === "unlisted" || value === "private" || value === "direct"
     ? value
     : undefined;
+}
+
+function setupLocation(args: string[]): "global" | "project" | undefined {
+  if (args.includes("--project")) {
+    return "project";
+  }
+  if (args.includes("--global")) {
+    return "global";
+  }
+  return undefined;
 }
 
 function flagValue(args: string[], flag: string): string | undefined {
@@ -315,6 +326,9 @@ Usage:
   reef publish mastodon <slug|path|number> [--visibility public|unlisted|private|direct] [--json]
   reef update mastodon <slug|path|number> [--json]
   reef publish github-pages [--json]
+  reef setup wordpress [--project] [--json]
+  reef setup mastodon [--project] [--json]
+  reef setup github-pages [--project] [--json]
   reef open
   reef open post hello
   reef open page about

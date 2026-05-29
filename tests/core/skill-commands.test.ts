@@ -43,6 +43,20 @@ describe("skill commands", () => {
     expect(result).toBe("published site");
   });
 
+  test("runs setup commands", async () => {
+    const calls: unknown[] = [];
+    const result = await runSkillCommand(
+      [loadedSkill("mastodon", "setup_config", async (input) => {
+        calls.push(input);
+        return "created";
+      })],
+      { action: "setup", platform: "mastodon", location: "project" },
+    );
+
+    expect(result).toBe("created");
+    expect(calls).toEqual([{ location: "project" }]);
+  });
+
   test("formats json results", () => {
     const input: SkillCommandInput = {
       action: "publish",

@@ -57,9 +57,6 @@ function skillToolInput(input: SkillCommandInput): {
   toolInput: Record<string, unknown>;
 } {
   if (input.action === "setup") {
-    if (input.platform !== "wordpress") {
-      throw new Error(`Setup is not implemented for ${input.platform}.`);
-    }
     return {
       toolName: "setup_config",
       toolInput: { location: input.location ?? "global" },

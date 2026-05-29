@@ -1,15 +1,45 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import mastodon from "../../skills/mastodon";
 import type { ToolContext, WorkspaceAPI } from "../../src/skill-api";
 
 const originalFetch = globalThis.fetch;
+const roots: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   globalThis.fetch = originalFetch;
   delete process.env.REEF_MASTODON_ACCESS_TOKEN;
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe("mastodon skill", () => {
+  test("creates a global fill-in config template", async () => {
+    const root = await tempRoot();
+    const configPath = join(root, ".reef", "config.toml");
+
+    const result = await tool("setup_config").run(
+      {},
+      context({
+        config: { __global_config_path: configPath },
+        secrets: {},
+        markdown: null,
+      }),
+    );
+
+    await expect(readFile(configPath, "utf8")).resolves.toBe(
+      [
+        "[mastodon]",
+        'instance = "https://mastodon.social"',
+        'access_token_env = "REEF_MASTODON_ACCESS_TOKEN"',
+        "",
+      ].join("\n"),
+    );
+    expect(String(result)).toContain("Created Mastodon config template");
+    expect(String(result)).toContain(configPath);
+  });
+
   test("publishes direct status text to the Mastodon statuses endpoint", async () => {
     const requests: { url: string; init?: RequestInit; body: Record<string, unknown> }[] = [];
     const createdPosts: { slug: string; date: string; body: string; title?: string }[] = [];
@@ -264,6 +294,7 @@ function context(input: {
     config: input.config,
     secrets: input.secrets,
     workspace: {
+      root: "",
       readPost: input.readPost ?? (async () => input.markdown),
       listPosts: async () => input.posts ?? [],
       createPost:
@@ -287,4 +318,10 @@ function tool(name: string) {
     throw new Error(`${name} tool missing`);
   }
   return found;
+}
+
+async function tempRoot(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "reef-mastodon-"));
+  roots.push(root);
+  return root;
 }

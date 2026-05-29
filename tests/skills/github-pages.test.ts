@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import githubPages from "../../skills/github-pages";
@@ -12,6 +12,27 @@ afterEach(async () => {
 });
 
 describe("github-pages skill", () => {
+  test("creates a global fill-in config template", async () => {
+    const root = await tempRoot();
+    const configPath = join(root, ".reef", "config.toml");
+
+    const result = await tool("setup_config").run(
+      {},
+      context(root, { __global_config_path: configPath }),
+    );
+
+    await expect(readFile(configPath, "utf8")).resolves.toBe(
+      [
+        "[github-pages]",
+        'repo = "git@github.com:you/you.github.io.git"',
+        'branch = "gh-pages"',
+        "",
+      ].join("\n"),
+    );
+    expect(String(result)).toContain("Created GitHub Pages config template");
+    expect(String(result)).toContain(configPath);
+  });
+
   test("publishes an existing dist directory through injectable git runner", async () => {
     const root = await tempRoot();
     await writeFile(join(root, "dist", "index.html"), "<h1>Hello</h1>");
@@ -51,11 +72,15 @@ describe("github-pages skill", () => {
 });
 
 function publishTool() {
-  const tool = githubPages.tools.find((candidate) => candidate.name === "publish_site");
-  if (!tool) {
-    throw new Error("publish_site tool missing");
+  return tool("publish_site");
+}
+
+function tool(name: string) {
+  const found = githubPages.tools.find((candidate) => candidate.name === name);
+  if (!found) {
+    throw new Error(`${name} tool missing`);
   }
-  return tool;
+  return found;
 }
 
 function context(

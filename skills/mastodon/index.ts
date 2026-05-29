@@ -1,7 +1,11 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { defineSkill, defineTool } from "../../src/skill-api";
 import { parseMarkdown } from "../../src/core/markdown";
 
 type Visibility = "public" | "unlisted" | "private" | "direct";
+type SetupInput = { location: "global" | "project" };
 
 const DEFAULT_ACCESS_TOKEN_ENV = "REEF_MASTODON_ACCESS_TOKEN";
 const DEFAULT_CHARACTER_LIMIT = 500;
@@ -15,8 +19,40 @@ export default defineSkill({
       "Direct Mastodon status prompts must create local markdown first, then publish that canonical source.",
       "Use mastodon_update_post when the user asks to update, edit, republish, or sync a local post that Reef previously published to Mastodon.",
       "Mastodon configuration uses [mastodon].instance and REEF_MASTODON_ACCESS_TOKEN by default.",
+      "Use mastodon_setup_config when the user asks to set up Mastodon or agrees to create the template.",
     ].join(" "),
   tools: [
+    defineTool({
+      name: "setup_config",
+      description:
+        "Create a fill-in Mastodon config template. Defaults to ~/.reef/config.toml so it can be reused across Reef projects.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            enum: ["global", "project"],
+            description:
+              "Where to write the template. Use global for ~/.reef/config.toml; use project for ./reef.toml.",
+          },
+        },
+      },
+      run: async (input, ctx) => {
+        const parsed = parseSetupInput(input);
+        const target = mastodonConfigPath(ctx, parsed.location);
+        const existing = await readOptionalFile(target);
+        if (/\[mastodon\]/.test(existing)) {
+          return `Mastodon config already exists in ${target}. Fill in the values there.`;
+        }
+
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, appendMastodonTemplate(existing));
+        return [
+          `Created Mastodon config template in ${target}.`,
+          "Fill in [mastodon].instance and set REEF_MASTODON_ACCESS_TOKEN, then try publishing again.",
+        ].join(" ");
+      },
+    }),
     defineTool({
       name: "publish_status",
       description:
@@ -174,6 +210,47 @@ export default defineSkill({
     }),
   ],
 });
+
+function parseSetupInput(input: unknown): SetupInput {
+  if (!input || typeof input !== "object") {
+    return { location: "global" };
+  }
+
+  const location = (input as Record<string, unknown>).location;
+  return {
+    location: location === "project" ? "project" : "global",
+  };
+}
+
+function mastodonConfigPath(
+  ctx: { config: Record<string, unknown>; workspace: { root: string } },
+  location: "global" | "project",
+): string {
+  if (location === "project") {
+    return join(ctx.workspace.root, "reef.toml");
+  }
+
+  return configString(ctx.config.__global_config_path) ?? join(homedir(), ".reef", "config.toml");
+}
+
+async function readOptionalFile(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function appendMastodonTemplate(existing: string): string {
+  const template = [
+    "[mastodon]",
+    'instance = "https://mastodon.social"',
+    'access_token_env = "REEF_MASTODON_ACCESS_TOKEN"',
+    "",
+  ].join("\n");
+
+  return existing.trim() ? `${existing.replace(/\s*$/, "\n\n")}${template}` : template;
+}
 
 function parseStatusInput(input: unknown): { status: string; visibility: Visibility } {
   if (!input || typeof input !== "object") {
