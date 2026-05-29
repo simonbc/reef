@@ -54,10 +54,52 @@ bun run check
 bun run reef
 bun run reef skill list
 bun run reef build
-bun run reef "publish posts/hello.md to my wordpress"
+bun run reef posts --json
+bun run reef post read 1 --json
+bun run reef publish wordpress 1 --json
+bun run reef update wordpress 1 --json
 ```
 
 `bun run check` must stay fast. It should run tests and bundle the real CLI.
+
+## Agent-Native Operation
+
+Reef should be treated as a local runtime with an agent-operable command surface.
+Codex, Claude Code, and similar harnesses provide the conversation, permissions,
+file editing, and long-context UX. Reef provides reliable local/social-web
+operations.
+
+Prefer this flow from agent harnesses:
+
+1. Inspect local source with `reef posts --json`, `reef pages --json`, and
+   `reef post read <slug|path|number> --json`.
+2. Edit canonical markdown/theme/config files directly.
+3. Run `reef build` after content or theme changes that should affect the site.
+4. Publish only after explicit user intent with `reef publish <platform> ...`.
+5. Update existing remote objects with `reef update <platform> ...` when Reef has
+   recorded platform state.
+6. Scaffold missing config with `reef setup <platform>`, then ask the user to
+   fill in real values.
+
+Important commands:
+
+```sh
+reef posts [--json]
+reef pages [--json]
+reef post read <slug|path|number> [--json]
+reef page read <slug|path|number> [--json]
+reef publish wordpress <slug|path|number> [--draft] [--json]
+reef update wordpress <slug|path|number> [--json]
+reef publish mastodon <slug|path|number> [--visibility public|unlisted|private|direct] [--json]
+reef update mastodon <slug|path|number> [--json]
+reef publish github-pages [--json]
+reef setup wordpress [--project] [--json]
+reef setup mastodon [--project] [--json]
+reef setup github-pages [--project] [--json]
+```
+
+Do not bypass markdown source. If a user asks to publish new content, create or
+update local markdown first, then publish through Reef.
 
 ## Test Layout
 
@@ -90,8 +132,9 @@ Running `reef` should eventually:
 - start a local server
 - open `http://localhost:3000`
 
-The browser UI is the primary interface. CLI one-shot prompts exist because
-hackers need them, but the product shape is browser-first.
+The current primary product boundary is the local runtime plus agent-operable
+CLI/skill surface. The built-in prompt harness exists as a convenience REPL and
+dogfooding surface, not as the place for unique product logic.
 
 Current M2 harness behavior: bare `reef` starts a terminal prompt loop and a
 local site server. The terminal shows `>` when ready for a prompt. The local

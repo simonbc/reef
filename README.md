@@ -16,9 +16,35 @@ Then run Reef from any runtime directory:
 reef
 reef skill list
 reef build
+reef posts --json
 ```
 
-## Run
+## Agent-Native CLI
+
+Reef is a local runtime. Agent harnesses such as Codex or Claude Code should
+prefer explicit commands and direct file edits over the built-in prompt harness:
+
+```sh
+reef posts --json
+reef pages --json
+reef post read 1 --json
+reef page read about --json
+reef build
+reef publish wordpress 1 --json
+reef update wordpress 1 --json
+reef publish mastodon 1 --visibility unlisted --json
+reef update mastodon 1 --json
+reef publish github-pages --json
+reef setup wordpress --json
+reef setup mastodon --json
+reef setup github-pages --json
+```
+
+Markdown in `posts/` and `pages/` remains canonical source. Publish/update
+commands use skill state in `.reef/skill-state/` to map local markdown to remote
+platform ids and URLs.
+
+## Prompt Harness
 
 ```sh
 bun run reef
