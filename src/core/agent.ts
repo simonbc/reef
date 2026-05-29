@@ -24,7 +24,9 @@ export async function runAgentOnce(input: {
   model: string;
 }): Promise<string> {
   if (!input.anthropicApiKey) {
-    throw new Error("Missing Anthropic API key. Set ANTHROPIC_API_KEY or reef.toml anthropic_key_env.");
+    throw new Error(
+      "Missing Anthropic API key. Set ANTHROPIC_API_KEY or anthropic_key_env in ~/.reef/config.toml or reef.toml.",
+    );
   }
 
   const toolMap = buildToolMap(input.skills);

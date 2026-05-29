@@ -193,7 +193,14 @@ must operate on the same canonical runtime model.
 
 ## Config Model
 
-Runtime config lives in `reef.toml`.
+Runtime config is split between global user config and project config.
+
+Global user config lives at `~/.reef/config.toml`. It is for reusable account
+defaults, publishing targets, and machine/user preferences.
+
+Project config lives at `./reef.toml`. It is for runtime identity and
+project-specific intent. The project directory must stay self-describing enough
+to git clone and understand.
 
 Example:
 
@@ -205,8 +212,22 @@ domain = "simonbc.com"
 url = "https://example.wordpress.com"
 ```
 
+Project config wins over global config. A project can override one key in a
+skill section while inheriting the rest from global config.
+
+Global config may also contain reusable named accounts:
+
+```toml
+[wordpress.personal]
+url = "https://personal.wordpress.com"
+
+[github-pages.personal]
+repo = "git@github.com:simonbc/simonbc.github.io.git"
+branch = "gh-pages"
+```
+
 Config may contain identity, domains, subscriptions, theme config, preferences,
-and skill config.
+skill config, and reusable account targets.
 
 Secrets do not belong in `reef.toml`. Use environment variables for the current
 early implementation; move toward `reef secret set <skill>.<name>` and encrypted

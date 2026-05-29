@@ -20,6 +20,84 @@ describe("loadConfig", () => {
       domain: "",
       anthropicKeyEnv: "ANTHROPIC_API_KEY",
       skillConfig: {},
+      globalAccounts: {},
+    });
+  });
+
+  test("merges global user config into project config with project precedence", async () => {
+    const root = await tempRoot("reef-project-config-");
+    const home = await tempRoot("reef-home-config-");
+    await writeFile(
+      join(home, "config.toml"),
+      [
+        'anthropic_key_env = "GLOBAL_ANTHROPIC_KEY"',
+        "",
+        "[wordpress]",
+        'url = "https://global.wordpress.com"',
+        "",
+        "[github-pages]",
+        'repo = "git@github.com:simonbc/global-site.git"',
+        'branch = "gh-pages"',
+      ].join("\n"),
+    );
+    await writeFile(
+      join(root, "reef.toml"),
+      [
+        'title = "Project Reef"',
+        'domain = "https://project.example"',
+        "",
+        "[github-pages]",
+        'branch = "project-pages"',
+      ].join("\n"),
+    );
+
+    await expect(loadConfig(root, { globalConfigPath: join(home, "config.toml") })).resolves.toEqual({
+      root,
+      title: "Project Reef",
+      domain: "https://project.example",
+      anthropicKeyEnv: "GLOBAL_ANTHROPIC_KEY",
+      skillConfig: {
+        wordpress: {
+          url: "https://global.wordpress.com",
+        },
+        "github-pages": {
+          repo: "git@github.com:simonbc/global-site.git",
+          branch: "project-pages",
+        },
+      },
+      globalAccounts: {},
+    });
+  });
+
+  test("supports nested global account sections as reusable skill config", async () => {
+    const root = await tempRoot("reef-global-nested-");
+    const home = await tempRoot("reef-home-nested-");
+    await writeFile(
+      join(home, "config.toml"),
+      [
+        "[wordpress.personal]",
+        'url = "https://personal.wordpress.com"',
+        "",
+        "[github-pages.personal]",
+        'repo = "git@github.com:simonbc/simonbc.github.io.git"',
+        'branch = "main"',
+      ].join("\n"),
+    );
+
+    const config = await loadConfig(root, { globalConfigPath: join(home, "config.toml") });
+
+    expect(config.globalAccounts).toEqual({
+      wordpress: {
+        personal: {
+          url: "https://personal.wordpress.com",
+        },
+      },
+      "github-pages": {
+        personal: {
+          repo: "git@github.com:simonbc/simonbc.github.io.git",
+          branch: "main",
+        },
+      },
     });
   });
 
