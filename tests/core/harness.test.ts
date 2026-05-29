@@ -39,6 +39,17 @@ describe("createHarnessApp", () => {
       .then((res) => res.text());
     expect(post).toContain("<h1>Hello</h1>");
   });
+
+  test("does not serve files outside dist", async () => {
+    const root = await tempRoot();
+    const app = createHarnessApp({ root });
+    await app.fetch(new Request("http://reef.local/__reef/build", { method: "POST" }));
+
+    const response = await app.fetch(new Request("http://reef.local/../reef.toml"));
+
+    expect(response.status).toBe(404);
+    await expect(response.text()).resolves.not.toContain('title = "Harness Reef"');
+  });
 });
 
 async function tempRoot(): Promise<string> {

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { buildSite } from "./build";
 import { loadConfig } from "./config";
 import { createWorkspace } from "./workspace";
@@ -36,11 +36,16 @@ async function handleRequest(root: string, request: Request): Promise<Response> 
 }
 
 async function staticFile(root: string, relativePath: string): Promise<Response> {
+  const distRoot = resolve(root, "dist");
   const normalizedPath =
     relativePath === "" || relativePath.endsWith("/")
       ? join(relativePath, "index.html")
       : relativePath;
-  const fullPath = join(root, "dist", normalizedPath);
+  const fullPath = resolve(distRoot, normalizedPath);
+  if (!isInsideDirectory(distRoot, fullPath)) {
+    return htmlResponse(unbuiltSite(), 404);
+  }
+
   try {
     const body = await readFile(fullPath);
     return new Response(body, {
@@ -84,4 +89,12 @@ function contentType(path: string): string {
     return "application/json; charset=utf-8";
   }
   return "text/html; charset=utf-8";
+}
+
+function isInsideDirectory(parent: string, child: string): boolean {
+  const childRelativePath = relative(parent, child);
+  return (
+    childRelativePath === "" ||
+    (!childRelativePath.startsWith("..") && !childRelativePath.startsWith(sep))
+  );
 }
