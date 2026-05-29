@@ -5,4 +5,4 @@ description = "Publish the built static site to a GitHub Pages branch."
 
 [config]
 repo = { description = "Git remote URL for the GitHub Pages repository.", required = true }
-branch = { description = "Publish branch.", required = false }
+branch = { description = "Publish branch. Defaults to gh-pages.", required = false }

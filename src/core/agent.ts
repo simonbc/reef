@@ -240,5 +240,5 @@ function isPublishTool(name: string): boolean {
 function hasPublishIntent(prompt: string): boolean {
   return /\b(publish|deploy|push|ship|post\s+to|send\s+to|upload|create\s+(a\s+)?remote\s+draft|create\s+(a\s+)?draft)\b/i.test(
     prompt,
-  );
+  ) || /\bpost\b.{0,80}\bto\b/i.test(prompt);
 }

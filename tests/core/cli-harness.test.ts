@@ -42,6 +42,69 @@ describe("runCliHarness", () => {
     expect(prompts).toEqual([]);
   });
 
+  test("supports open slash command without invoking the agent", async () => {
+    const writes: string[] = [];
+    const opened: unknown[] = [];
+    const prompts: string[] = [];
+
+    await runCliHarness({
+      prompts: asyncLines(["/open post hello", "exit"]),
+      output: { write: (chunk) => writes.push(chunk) },
+      runPrompt: async (prompt) => {
+        prompts.push(prompt);
+        return "should not run";
+      },
+      runOpen: async (args) => {
+        expect(args).toEqual(["post", "hello"]);
+        return { type: "file", path: "/tmp/reef/posts/hello.md" };
+      },
+      openTarget: (target) => {
+        opened.push(target);
+      },
+      spinnerFactory: () => ({
+        start: () => {},
+        stop: () => {},
+      }),
+    });
+
+    expect(writes.join("")).toBe("> Opened /tmp/reef/posts/hello.md\n> ");
+    expect(opened).toEqual([{ type: "file", path: "/tmp/reef/posts/hello.md" }]);
+    expect(prompts).toEqual([]);
+  });
+
+  test("lists posts and pages for numbered opening", async () => {
+    const writes: string[] = [];
+
+    await runCliHarness({
+      prompts: asyncLines(["/posts", "/pages", "exit"]),
+      output: { write: (chunk) => writes.push(chunk) },
+      runPrompt: async () => "should not run",
+      listPosts: async () => [
+        {
+          slug: "hello",
+          path: "posts/hello.md",
+          title: "Hello",
+          date: "2026-05-29",
+        },
+      ],
+      listPages: async () => [
+        {
+          slug: "about",
+          path: "pages/about.md",
+          title: "About",
+        },
+      ],
+      spinnerFactory: () => ({
+        start: () => {},
+        stop: () => {},
+      }),
+    });
+
+    expect(writes.join("")).toBe(
+      "> 1. Hello 2026-05-29 (posts/hello.md)\n> 1. About (pages/about.md)\n> ",
+    );
+  });
+
   test("passes prior turns as history for follow-up prompts", async () => {
     const calls: { prompt: string; history: unknown[] }[] = [];
 

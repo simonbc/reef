@@ -8,12 +8,17 @@ type GitRunner = (args: string[], cwd: string) => Promise<string>;
 export default defineSkill({
   name: "github-pages",
   systemPrompt:
-    "GitHub Pages publishing requires a built dist/ directory. Use github-pages_publish_site after the site has been built.",
+    [
+      "GitHub Pages publishing requires a built dist/ directory.",
+      "Use github-pages_publish_site only when the user explicitly asks to publish, deploy, or push to GitHub Pages.",
+      "If the site has changed and dist/ may be stale, build the site before publishing.",
+      "GitHub Pages configuration uses [github-pages].repo and optional [github-pages].branch.",
+    ].join(" "),
   tools: [
     defineTool({
       name: "publish_site",
       description:
-        "Publish the current dist/ directory to a GitHub Pages branch. Requires github-pages.repo in reef.toml.",
+        "Publish the current dist/ directory to a GitHub Pages branch. Requires [github-pages].repo in reef.toml or ~/.reef/config.toml; [github-pages].branch defaults to gh-pages.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -26,7 +31,7 @@ export default defineSkill({
           typeof injectedRunner === "function" ? (injectedRunner as GitRunner) : defaultGitRunner;
 
         if (!repo) {
-          return "Skill 'github-pages' is not configured. Set [github-pages].repo in reef.toml.";
+          return githubPagesConfigMessage();
         }
 
         const dist = join(ctx.workspace.root, "dist");
@@ -54,6 +59,14 @@ export default defineSkill({
     }),
   ],
 });
+
+function githubPagesConfigMessage(): string {
+  return [
+    "Skill 'github-pages' is not configured.",
+    "Set [github-pages].repo in reef.toml or ~/.reef/config.toml.",
+    "Set [github-pages].branch if you do not want the default gh-pages branch.",
+  ].join(" ");
+}
 
 async function defaultGitRunner(args: string[], cwd: string): Promise<string> {
   const result = Bun.spawnSync(["git", ...args], {

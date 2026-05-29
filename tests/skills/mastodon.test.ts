@@ -62,12 +62,16 @@ describe("mastodon skill", () => {
 
   test("publishes a markdown post as plain text", async () => {
     const requests: { body: Record<string, unknown> }[] = [];
+    const stateWrites: { key: string; value: unknown }[] = [];
 
     globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
       requests.push({
         body: JSON.parse(String(init?.body)),
       });
-      return new Response(JSON.stringify({ url: "https://mastodon.example/@simon/2" }), {
+      return new Response(JSON.stringify({
+        id: "2",
+        url: "https://mastodon.example/@simon/2",
+      }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -80,12 +84,111 @@ describe("mastodon skill", () => {
         secrets: { access_token: "test-token" },
         markdown:
           "---\ntitle: Hello Reef\n---\n\n# Hello Reef\n\nThis is **bold** and [linked](https://example.com).",
+        stateWrites,
       }),
     );
 
     expect(result).toBe("Published hello to Mastodon: https://mastodon.example/@simon/2");
     expect(requests[0].body.status).toBe(
       "Hello Reef\n\nThis is bold and linked (https://example.com).",
+    );
+    expect(stateWrites).toEqual([
+      {
+        key: "post:hello",
+        value: {
+          id: "2",
+          url: "https://mastodon.example/@simon/2",
+        },
+      },
+    ]);
+  });
+
+  test("publishes numbered post selections from the current post list", async () => {
+    const readPaths: string[] = [];
+
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({
+        id: "2",
+        url: "https://mastodon.example/@simon/2",
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const result = await tool("publish_post").run(
+      { path: "1" },
+      context({
+        config: { instance: "https://mastodon.example" },
+        secrets: { access_token: "test-token" },
+        posts: [{ slug: "hello", path: "posts/hello.md", title: "Hello" }],
+        markdown: "# Hello",
+        readPost: async (path) => {
+          readPaths.push(path);
+          return "# Hello";
+        },
+      }),
+    );
+
+    expect(result).toBe("Published posts/hello.md to Mastodon: https://mastodon.example/@simon/2");
+    expect(readPaths).toEqual(["posts/hello.md"]);
+  });
+
+  test("updates a previously published Mastodon status from markdown", async () => {
+    const requests: { url: string; init?: RequestInit; body: Record<string, unknown> }[] = [];
+
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        url: String(url),
+        init,
+        body: JSON.parse(String(init?.body)),
+      });
+      return new Response(JSON.stringify({
+        id: "2",
+        url: "https://mastodon.example/@simon/2",
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const result = await tool("update_post").run(
+      { path: "hello" },
+      context({
+        config: { instance: "https://mastodon.example" },
+        secrets: { access_token: "test-token" },
+        markdown: "# Hello updated\n\nEdited body.",
+        state: {
+          "post:hello": {
+            id: "2",
+            url: "https://mastodon.example/@simon/2",
+          },
+        },
+      }),
+    );
+
+    expect(result).toBe("Updated hello on Mastodon: https://mastodon.example/@simon/2");
+    expect(requests[0].url).toBe("https://mastodon.example/api/v1/statuses/2");
+    expect(requests[0].init?.method).toBe("PUT");
+    expect(requests[0].body).toEqual({ status: "Hello updated\n\nEdited body." });
+  });
+
+  test("reports when a post has not been published to Mastodon before update", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("fetch should not be called");
+    }) as typeof fetch;
+
+    const result = await tool("update_post").run(
+      { path: "hello" },
+      context({
+        config: { instance: "https://mastodon.example" },
+        secrets: { access_token: "test-token" },
+        markdown: "# Hello",
+      }),
+    );
+
+    expect(result).toBe(
+      "No Mastodon status is recorded for hello. Publish it to Mastodon first.",
     );
   });
 
@@ -104,6 +207,9 @@ describe("mastodon skill", () => {
     );
 
     expect(String(result)).toContain("Skill 'mastodon' is not configured.");
+    expect(String(result)).toContain("[mastodon].instance");
+    expect(String(result)).toContain("REEF_MASTODON_INSTANCE");
+    expect(String(result)).toContain("REEF_MASTODON_ACCESS_TOKEN");
   });
 
   test("rejects statuses over the configured character limit", async () => {
@@ -147,19 +253,30 @@ describe("mastodon skill", () => {
 function context(input: {
   config: Record<string, unknown>;
   secrets: Record<string, string>;
+  posts?: Awaited<ReturnType<WorkspaceAPI["listPosts"]>>;
   markdown: string | null;
+  readPost?: WorkspaceAPI["readPost"];
   createPost?: WorkspaceAPI["createPost"];
+  state?: Record<string, unknown>;
+  stateWrites?: { key: string; value: unknown }[];
 }): ToolContext {
   return {
     config: input.config,
     secrets: input.secrets,
     workspace: {
-      readPost: async () => input.markdown,
+      readPost: input.readPost ?? (async () => input.markdown),
+      listPosts: async () => input.posts ?? [],
       createPost:
         input.createPost ??
         (async () => {
           throw new Error("createPost should not be called");
         }),
+      skillState: {
+        read: async (_skillName, key) => input.state?.[key] ?? null,
+        write: async (_skillName, key, value) => {
+          input.stateWrites?.push({ key, value });
+        },
+      },
     } as Partial<WorkspaceAPI> as WorkspaceAPI,
   };
 }

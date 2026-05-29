@@ -9,12 +9,18 @@ const DEFAULT_CHARACTER_LIMIT = 500;
 export default defineSkill({
   name: "mastodon",
   systemPrompt:
-    "Mastodon publishing posts statuses to a configured instance. Publish only when the user explicitly asks to post, publish, or send to Mastodon.",
+    [
+      "Mastodon publishing posts statuses to a configured instance.",
+      "Publish only when the user explicitly asks to post, publish, or send to Mastodon.",
+      "Direct Mastodon status prompts must create local markdown first, then publish that canonical source.",
+      "Use mastodon_update_post when the user asks to update, edit, republish, or sync a local post that Reef previously published to Mastodon.",
+      "Mastodon configuration uses [mastodon].instance and REEF_MASTODON_ACCESS_TOKEN by default.",
+    ].join(" "),
   tools: [
     defineTool({
       name: "publish_status",
       description:
-        "Publish direct text as a Mastodon status. Requires mastodon.instance and an access token.",
+        "Create a local markdown post from direct text, then publish it as a Mastodon status. Requires [mastodon].instance and REEF_MASTODON_ACCESS_TOKEN by default.",
       inputSchema: {
         type: "object",
         properties: {
@@ -46,20 +52,24 @@ export default defineSkill({
         const date = todayIsoDate();
         await ctx.workspace.createPost(slug, date, parsed.status, titleFromStatus(parsed.status));
 
-        const url = await publishToMastodon({
+        const published = await publishToMastodon({
           instance: config.instance,
           accessToken: config.accessToken,
           status: parsed.status,
           visibility: parsed.visibility,
         });
+        await ctx.workspace.skillState.write("mastodon", stateKey(slug), {
+          id: published.id,
+          url: published.url,
+        });
 
-        return `Created posts/${slug}.md and published it to Mastodon: ${url}`;
+        return `Created posts/${slug}.md and published it to Mastodon: ${published.url}`;
       },
     }),
     defineTool({
       name: "publish_post",
       description:
-        "Publish a local markdown post to Mastodon as plain text. Requires mastodon.instance and an access token.",
+        "Publish a local markdown post to Mastodon as plain text. Requires [mastodon].instance and REEF_MASTODON_ACCESS_TOKEN by default.",
       inputSchema: {
         type: "object",
         properties: {
@@ -77,9 +87,10 @@ export default defineSkill({
       },
       run: async (input, ctx) => {
         const parsed = parsePostInput(input);
-        const markdown = await ctx.workspace.readPost(parsed.path);
+        const path = await resolvePostPath(parsed.path, ctx);
+        const markdown = await ctx.workspace.readPost(path);
         if (!markdown) {
-          return `Post not found: ${parsed.path}`;
+          return `Post not found: ${path}`;
         }
 
         const config = mastodonConfig(ctx.config, ctx.secrets);
@@ -87,21 +98,78 @@ export default defineSkill({
           return config.message;
         }
 
-        const post = parseMarkdown(markdown, parsed.path);
+        const post = parseMarkdown(markdown, path);
         const status = markdownToPlainText(post.body);
         const limit = characterLimit(ctx.config);
         if (status.length > limit) {
           return overLimitMessage(status, limit);
         }
 
-        const url = await publishToMastodon({
+        const published = await publishToMastodon({
           instance: config.instance,
           accessToken: config.accessToken,
           status,
           visibility: parsed.visibility,
         });
+        await ctx.workspace.skillState.write("mastodon", stateKey(path), {
+          id: published.id,
+          url: published.url,
+        });
 
-        return `Published ${parsed.path} to Mastodon: ${url}`;
+        return `Published ${path} to Mastodon: ${published.url}`;
+      },
+    }),
+    defineTool({
+      name: "update_post",
+      description:
+        "Update a previously published Mastodon status from a local markdown post. Requires that the post was first published by Reef and has a recorded Mastodon status id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Post slug or path, for example hello or posts/hello.md.",
+          },
+        },
+        required: ["path"],
+      },
+      run: async (input, ctx) => {
+        const parsed = parsePostInput(input);
+        const path = await resolvePostPath(parsed.path, ctx);
+        const markdown = await ctx.workspace.readPost(path);
+        if (!markdown) {
+          return `Post not found: ${path}`;
+        }
+
+        const state = await ctx.workspace.skillState.read("mastodon", stateKey(path));
+        if (!isPublishedState(state)) {
+          return `No Mastodon status is recorded for ${path}. Publish it to Mastodon first.`;
+        }
+
+        const config = mastodonConfig(ctx.config, ctx.secrets);
+        if (!config.ok) {
+          return config.message;
+        }
+
+        const post = parseMarkdown(markdown, path);
+        const status = markdownToPlainText(post.body);
+        const limit = characterLimit(ctx.config);
+        if (status.length > limit) {
+          return overLimitMessage(status, limit);
+        }
+
+        const updated = await updateMastodonStatus({
+          instance: config.instance,
+          accessToken: config.accessToken,
+          id: state.id,
+          status,
+        });
+        await ctx.workspace.skillState.write("mastodon", stateKey(path), {
+          id: updated.id,
+          url: updated.url,
+        });
+
+        return `Updated ${path} on Mastodon: ${updated.url}`;
       },
     }),
   ],
@@ -139,6 +207,19 @@ function parsePostInput(input: unknown): { path: string; visibility: Visibility 
   };
 }
 
+async function resolvePostPath(
+  path: string,
+  ctx: { workspace: { listPosts(): Promise<{ path: string }[]> } },
+): Promise<string> {
+  if (!/^\d+$/.test(path)) {
+    return path;
+  }
+
+  const index = Number(path) - 1;
+  const posts = await ctx.workspace.listPosts();
+  return posts[index]?.path ?? path;
+}
+
 function parseVisibility(value: unknown): Visibility {
   return value === "unlisted" || value === "private" || value === "direct"
     ? value
@@ -158,14 +239,19 @@ function mastodonConfig(
   if (!instance || !accessToken) {
     return {
       ok: false,
-      message: [
-        "Skill 'mastodon' is not configured.",
-        `Set [mastodon].instance and ${accessTokenEnv}.`,
-      ].join(" "),
+      message: mastodonConfigMessage(accessTokenEnv),
     };
   }
 
   return { ok: true, instance, accessToken };
+}
+
+function mastodonConfigMessage(accessTokenEnv: string): string {
+  return [
+    "Skill 'mastodon' is not configured.",
+    "Set [mastodon].instance in reef.toml or ~/.reef/config.toml, or set REEF_MASTODON_INSTANCE.",
+    `Set ${accessTokenEnv}.`,
+  ].join(" ");
 }
 
 async function publishToMastodon(input: {
@@ -173,7 +259,7 @@ async function publishToMastodon(input: {
   accessToken: string;
   status: string;
   visibility: Visibility;
-}): Promise<string> {
+}): Promise<{ id: string; url: string }> {
   const baseUrl = input.instance.replace(/\/+$/, "");
   const response = await fetch(`${baseUrl}/api/v1/statuses`, {
     method: "POST",
@@ -192,7 +278,39 @@ async function publishToMastodon(input: {
     throw new Error(`Mastodon API error ${response.status}: ${JSON.stringify(json)}`);
   }
 
-  return typeof json.url === "string" ? json.url : "(no URL returned)";
+  return {
+    id: typeof json.id === "string" ? json.id : "",
+    url: typeof json.url === "string" ? json.url : "(no URL returned)",
+  };
+}
+
+async function updateMastodonStatus(input: {
+  instance: string;
+  accessToken: string;
+  id: string;
+  status: string;
+}): Promise<{ id: string; url: string }> {
+  const baseUrl = input.instance.replace(/\/+$/, "");
+  const response = await fetch(`${baseUrl}/api/v1/statuses/${input.id}`, {
+    method: "PUT",
+    headers: {
+      authorization: `Bearer ${input.accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      status: input.status,
+    }),
+  });
+
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(`Mastodon API error ${response.status}: ${JSON.stringify(json)}`);
+  }
+
+  return {
+    id: typeof json.id === "string" ? json.id : input.id,
+    url: typeof json.url === "string" ? json.url : "(no URL returned)",
+  };
 }
 
 function markdownToPlainText(markdown: string): string {
@@ -221,6 +339,19 @@ function characterLimit(config: Record<string, unknown>): number {
 
 function configString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function stateKey(path: string): string {
+  return `post:${path.replace(/^posts\//, "").replace(/\.md$/, "")}`;
+}
+
+function isPublishedState(value: unknown): value is { id: string; url: string } {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).id === "string" &&
+    typeof (value as Record<string, unknown>).url === "string"
+  );
 }
 
 function statusSlug(status: string): string {

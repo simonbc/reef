@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import type { ReefConfig } from "./config";
+import { openTarget, type OpenRunner } from "./open";
 import type { SkillDef, ToolContext, ToolDef, WorkspaceAPI } from "../skill-api";
 
 export type LoadedSkill = {
@@ -18,6 +19,8 @@ export async function loadSkills(input: {
   config: ReefConfig;
   workspace: WorkspaceAPI;
   builtInSkillsDir?: string;
+  openRunner?: OpenRunner;
+  openPort?: number;
 }): Promise<LoadedSkill[]> {
   const skillRoots = [
     input.builtInSkillsDir ?? defaultBuiltInSkillsDir(),
@@ -57,7 +60,15 @@ export async function loadSkills(input: {
         tools: skill.tools,
         systemPrompt: skill.systemPrompt,
         context: {
-          config: input.config.skillConfig[skill.name] ?? {},
+          config: {
+            ...(input.config.skillConfig[skill.name] ?? {}),
+            ...(skill.name === "open"
+              ? {
+                  __open_runner: input.openRunner ?? openTarget,
+                  port: input.openPort,
+                }
+              : {}),
+          },
           secrets: envSecretsFor(skill.name),
           workspace: input.workspace,
         },

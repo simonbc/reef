@@ -1,0 +1,4 @@
+[skill]
+name = "open"
+version = "0.1.0"
+description = "Open the local Reef server, built posts, and built pages."

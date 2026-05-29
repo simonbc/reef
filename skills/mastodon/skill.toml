@@ -1,4 +1,9 @@
 [skill]
 name = "mastodon"
 version = "0.1.0"
-description = "Publish local posts or direct statuses to Mastodon."
+description = "Publish local markdown posts or direct status prompts to Mastodon."
+
+[config]
+instance = { description = "Mastodon instance URL, for example https://mastodon.social.", required = true }
+access_token_env = { description = "Environment variable containing the Mastodon access token. Defaults to REEF_MASTODON_ACCESS_TOKEN.", required = false }
+character_limit = { description = "Status character limit. Defaults to 500.", required = false }

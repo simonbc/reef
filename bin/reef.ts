@@ -6,6 +6,7 @@ import { buildSite } from "../src/core/build";
 import { runCliHarness } from "../src/core/cli-harness";
 import { loadConfig } from "../src/core/config";
 import { createHarnessApp } from "../src/core/harness";
+import { openTarget, resolveOpenTarget } from "../src/core/open";
 import { loadSkills } from "../src/core/skill-loader";
 import { createSpinner } from "../src/core/spinner";
 import { renderTerminalMarkdown } from "../src/core/terminal-markdown";
@@ -27,6 +28,11 @@ try {
 
   if (command === "build") {
     await build();
+    process.exit(0);
+  }
+
+  if (command === "open") {
+    await openCommand(args.slice(1));
     process.exit(0);
   }
 
@@ -61,13 +67,19 @@ async function runPromptText(
   prompt: string,
   history: ChatTurn[] = [],
   onEvent?: (event: AgentEvent) => void,
+  openPort?: number,
 ) {
   onEvent?.({ type: "phase", message: "Loading config" });
   const config = await loadConfig(process.cwd());
   onEvent?.({ type: "phase", message: "Loading workspace" });
   const workspace = await createWorkspace(process.cwd());
   onEvent?.({ type: "phase", message: "Loading skills" });
-  const skills = await loadSkills({ config, workspace });
+  const skills = await loadSkills({
+    config,
+    workspace,
+    openRunner: openTarget,
+    openPort,
+  });
 
   return runAgentOnce({
     prompt,
@@ -116,6 +128,19 @@ async function listSkills(): Promise<void> {
   }
 }
 
+async function openCommand(args: string[]): Promise<void> {
+  const workspace = await createWorkspace(process.cwd());
+  const target = await resolveOpenTarget({
+    root: process.cwd(),
+    args,
+    port: Number(process.env.REEF_PORT ?? 3000),
+    posts: await workspace.listPosts(),
+    pages: await workspace.listPages(),
+  });
+  openTarget(target);
+  console.log(target.type === "server" ? `Opened ${target.url}` : `Opened ${target.path}`);
+}
+
 async function runInteractiveHarness(): Promise<void> {
   console.log(await buildText());
 
@@ -136,11 +161,24 @@ async function runInteractiveHarness(): Promise<void> {
   });
 
   try {
+    const workspace = await createWorkspace(process.cwd());
     await runCliHarness({
       prompts: readline,
       output: process.stdout,
-      runPrompt: runPromptText,
+      runPrompt: (prompt, history, onEvent) =>
+        runPromptText(prompt, history, onEvent, server.port),
       runBuild: buildText,
+      runOpen: async (args) =>
+        resolveOpenTarget({
+          root: process.cwd(),
+          args,
+          port: server.port,
+          posts: await workspace.listPosts(),
+          pages: await workspace.listPages(),
+        }),
+      listPosts: () => workspace.listPosts(),
+      listPages: () => workspace.listPages(),
+      openTarget,
       spinnerFactory: (label) =>
         createSpinner(label, {
           enabled: process.stderr.isTTY,
@@ -159,5 +197,8 @@ Usage:
   reef "publish posts/hello.md to my wordpress"
   reef skill list
   reef build
+  reef open
+  reef open post hello
+  reef open page about
 `);
 }

@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Publish local markdown posts to WordPress."
 
 [config]
-url = { description = "WordPress site URL", required = true }
+url = { description = "WordPress site URL. REEF_WP_URL is also supported as an environment fallback.", required = true }
 
 [secrets]
-username = { description = "WordPress username", required = true }
-app_password = { description = "WordPress application password", required = true }
+username = { description = "WordPress username, usually from REEF_WORDPRESS_USERNAME.", required = true }
+app_password = { description = "WordPress application password, usually from REEF_WORDPRESS_APP_PASSWORD.", required = true }

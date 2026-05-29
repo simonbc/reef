@@ -307,6 +307,51 @@ describe("runAgentOnce", () => {
     expect(result).toBe("Published.");
     expect(toolRan).toBe(true);
   });
+
+  test("allows publish tools when the current prompt says post a numbered item to a platform", async () => {
+    let toolRan = false;
+    let requestCount = 0;
+
+    globalThis.fetch = (async () => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        return jsonResponse({
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_publish",
+              name: "wordpress_publish_post",
+              input: { path: "1" },
+            },
+          ],
+        });
+      }
+
+      return jsonResponse({
+        content: [{ type: "text", text: "Posted." }],
+      });
+    }) as typeof fetch;
+
+    const result = await runAgentOnce({
+      prompt: "can you post 1 to wordpress?",
+      model: "claude-test",
+      anthropicApiKey: "test-key",
+      skills: [
+        loadedSkill({
+          name: "wordpress",
+          toolName: "publish_post",
+          toolRun: async () => {
+            toolRan = true;
+            return "posted";
+          },
+        }),
+      ],
+    });
+
+    expect(result).toBe("Posted.");
+    expect(toolRan).toBe(true);
+  });
 });
 
 function loadedSkill(input: {

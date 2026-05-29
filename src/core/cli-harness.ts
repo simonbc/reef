@@ -1,6 +1,8 @@
 import type { Spinner } from "./spinner";
 import { renderTerminalMarkdown } from "./terminal-markdown";
 import type { AgentEvent, ChatTurn } from "./agent";
+import type { OpenTarget } from "./open";
+import type { PageMeta, PostMeta } from "../skill-api";
 
 type Writable = {
   write(chunk: string): unknown;
@@ -15,6 +17,10 @@ export type CliHarnessOptions = {
     onEvent: (event: AgentEvent) => void,
   ) => Promise<string>;
   runBuild?: () => Promise<string>;
+  runOpen?: (args: string[]) => Promise<OpenTarget>;
+  listPosts?: () => Promise<PostMeta[]>;
+  listPages?: () => Promise<PageMeta[]>;
+  openTarget?: (target: OpenTarget) => Promise<void> | void;
   spinnerFactory: (label: string) => Spinner;
 };
 
@@ -55,6 +61,40 @@ export async function runCliHarness(options: CliHarnessOptions): Promise<void> {
       continue;
     }
 
+    if (prompt === "/posts") {
+      if (!options.listPosts) {
+        options.output.write("No posts command is available.\n> ");
+        continue;
+      }
+      options.output.write(`${formatItems(await options.listPosts(), "posts")}\n> `);
+      continue;
+    }
+
+    if (prompt === "/pages") {
+      if (!options.listPages) {
+        options.output.write("No pages command is available.\n> ");
+        continue;
+      }
+      options.output.write(`${formatItems(await options.listPages(), "pages")}\n> `);
+      continue;
+    }
+
+    if (prompt === "/open" || prompt.startsWith("/open ")) {
+      if (!options.runOpen || !options.openTarget) {
+        options.output.write("No open command is available.\n> ");
+        continue;
+      }
+
+      try {
+        const target = await options.runOpen(prompt.split(/\s+/).slice(1));
+        await options.openTarget(target);
+        options.output.write(`${openedMessage(target)}\n> `);
+      } catch (error) {
+        options.output.write(`${error instanceof Error ? error.message : String(error)}\n> `);
+      }
+      continue;
+    }
+
     const spinner = options.spinnerFactory("Thinking");
     spinner.start();
     const showEvent = (event: AgentEvent) => {
@@ -78,6 +118,26 @@ export async function runCliHarness(options: CliHarnessOptions): Promise<void> {
 
     options.output.write("> ");
   }
+}
+
+function formatItems(items: (PostMeta | PageMeta)[], label: "posts" | "pages"): string {
+  if (items.length === 0) {
+    return `No ${label} found.`;
+  }
+
+  return items
+    .map((item, index) => {
+      const date = "date" in item && item.date ? ` ${item.date}` : "";
+      return `${index + 1}. ${item.title ?? item.slug}${date} (${item.path})`;
+    })
+    .join("\n");
+}
+
+function openedMessage(target: OpenTarget): string {
+  if (target.type === "file") {
+    return `Opened ${target.path}`;
+  }
+  return `Opened ${target.url}`;
 }
 
 function formatAgentEvent(event: AgentEvent, debug: boolean): string {

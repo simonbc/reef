@@ -44,6 +44,9 @@ describe("github-pages skill", () => {
     const result = await publishTool().run({}, context(await tempRoot(), {}));
 
     expect(String(result)).toContain("Skill 'github-pages' is not configured.");
+    expect(String(result)).toContain("[github-pages].repo");
+    expect(String(result)).toContain("~/.reef/config.toml");
+    expect(String(result)).toContain("[github-pages].branch");
   });
 });
 
