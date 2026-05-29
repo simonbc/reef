@@ -2,6 +2,7 @@ import type { Spinner } from "./spinner";
 import { renderTerminalMarkdown } from "./terminal-markdown";
 import type { AgentEvent, ChatTurn } from "./agent";
 import type { OpenTarget } from "./open";
+import { formatContentList } from "./content-commands";
 import type { PageMeta, PostMeta } from "../skill-api";
 
 type Writable = {
@@ -66,7 +67,7 @@ export async function runCliHarness(options: CliHarnessOptions): Promise<void> {
         options.output.write("No posts command is available.\n> ");
         continue;
       }
-      options.output.write(`${formatItems(await options.listPosts(), "posts")}\n> `);
+      options.output.write(`${formatContentList(await options.listPosts(), "posts")}\n> `);
       continue;
     }
 
@@ -75,7 +76,7 @@ export async function runCliHarness(options: CliHarnessOptions): Promise<void> {
         options.output.write("No pages command is available.\n> ");
         continue;
       }
-      options.output.write(`${formatItems(await options.listPages(), "pages")}\n> `);
+      options.output.write(`${formatContentList(await options.listPages(), "pages")}\n> `);
       continue;
     }
 
@@ -118,19 +119,6 @@ export async function runCliHarness(options: CliHarnessOptions): Promise<void> {
 
     options.output.write("> ");
   }
-}
-
-function formatItems(items: (PostMeta | PageMeta)[], label: "posts" | "pages"): string {
-  if (items.length === 0) {
-    return `No ${label} found.`;
-  }
-
-  return items
-    .map((item, index) => {
-      const date = "date" in item && item.date ? ` ${item.date}` : "";
-      return `${index + 1}. ${item.title ?? item.slug}${date} (${item.path})`;
-    })
-    .join("\n");
 }
 
 function openedMessage(target: OpenTarget): string {
