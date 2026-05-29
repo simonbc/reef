@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { createInterface } from "node:readline/promises";
+import { join } from "node:path";
 import { runAgentOnce, type AgentEvent, type ChatTurn } from "../src/core/agent";
 import { buildSite } from "../src/core/build";
 import { runCliHarness } from "../src/core/cli-harness";
@@ -11,6 +12,12 @@ import {
   readContent,
   type ContentKind,
 } from "../src/core/content-commands";
+import {
+  formatConfigSetResult,
+  formatProjectConfig,
+  readProjectConfig,
+  setProjectConfigValue,
+} from "../src/core/config-commands";
 import { loadConfig } from "../src/core/config";
 import { createHarnessApp } from "../src/core/harness";
 import { openTarget, resolveOpenTarget } from "../src/core/open";
@@ -36,6 +43,11 @@ try {
 
   if (command === "skill" && args[1] === "list") {
     await listSkills();
+    process.exit(0);
+  }
+
+  if (command === "config") {
+    await configCommand(args.slice(1));
     process.exit(0);
   }
 
@@ -154,6 +166,32 @@ async function listSkills(): Promise<void> {
       console.log(`  error: ${skill.error}`);
     }
   }
+}
+
+async function configCommand(args: string[]): Promise<void> {
+  const subcommand = args[0];
+  if (subcommand === "show") {
+    const source = await readProjectConfig(process.cwd());
+    console.log(formatProjectConfig(join(process.cwd(), "reef.toml"), source, {
+      json: hasFlag(args, "--json"),
+    }));
+    return;
+  }
+
+  if (subcommand === "set") {
+    const positional = args.slice(1).filter((arg) => !arg.startsWith("--"));
+    const [key, ...valueParts] = positional;
+    const value = valueParts.join(" ");
+    if (!key || !value) {
+      throw new Error("Usage: reef config set <key|section.key> <value> [--json]");
+    }
+
+    const result = await setProjectConfigValue(process.cwd(), key, value);
+    console.log(formatConfigSetResult(result, { json: hasFlag(args, "--json") }));
+    return;
+  }
+
+  throw new Error("Usage: reef config show [--json] | reef config set <key|section.key> <value> [--json]");
 }
 
 async function openCommand(args: string[]): Promise<void> {
@@ -316,6 +354,8 @@ function printUsage(): void {
 Usage:
   reef "publish posts/hello.md to my wordpress"
   reef skill list
+  reef config show [--json]
+  reef config set <key|section.key> <value> [--json]
   reef build
   reef posts [--json]
   reef pages [--json]
