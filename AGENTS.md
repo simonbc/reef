@@ -52,6 +52,7 @@ command semantics, or CLI command semantics.
 bun test
 bun run check
 bun run reef skill list
+bun run reef build
 bun run reef "publish posts/hello.md to my wordpress"
 ```
 
@@ -363,6 +364,14 @@ Responsibilities:
 - publish via git/GitHub API
 
 GitHub Pages owns no presentation layer. Reef must render the full site.
+
+Current build contract:
+
+- `reef build` writes `dist/index.html`, per-post pages, per-page pages,
+  `dist/feed.json`, and `dist/styles.css`.
+- `github-pages_publish_site` publishes the existing `dist/` directory to the
+  configured branch. It should not silently build first; explicit build keeps the
+  generated artifact inspectable before publishing.
 
 ## Testing Expectations
 

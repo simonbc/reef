@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { runAgentOnce } from "../src/core/agent";
+import { buildSite } from "../src/core/build";
 import { loadConfig } from "../src/core/config";
 import { loadSkills } from "../src/core/skill-loader";
 import { createWorkspace } from "../src/core/workspace";
@@ -20,7 +21,7 @@ try {
   }
 
   if (command === "build") {
-    console.log("reef build is not implemented yet.");
+    await build();
     process.exit(0);
   }
 
@@ -46,6 +47,18 @@ async function runPrompt(prompt: string): Promise<void> {
   if (result.trim()) {
     console.log(result);
   }
+}
+
+async function build(): Promise<void> {
+  const config = await loadConfig(process.cwd());
+  const workspace = await createWorkspace(process.cwd());
+  const result = await buildSite({
+    title: config.title,
+    domain: config.domain,
+    workspace,
+  });
+
+  console.log(`Built ${result.files.length} files into dist/.`);
 }
 
 async function listSkills(): Promise<void> {
