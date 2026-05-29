@@ -15,6 +15,12 @@ import { loadConfig } from "../src/core/config";
 import { createHarnessApp } from "../src/core/harness";
 import { openTarget, resolveOpenTarget } from "../src/core/open";
 import { loadSkills } from "../src/core/skill-loader";
+import {
+  formatSkillCommandResult,
+  runSkillCommand,
+  type SkillCommandAction,
+  type SkillCommandPlatform,
+} from "../src/core/skill-commands";
 import { createSpinner } from "../src/core/spinner";
 import { renderTerminalMarkdown } from "../src/core/terminal-markdown";
 import { createWorkspace } from "../src/core/workspace";
@@ -45,6 +51,11 @@ try {
 
   if ((command === "post" || command === "page") && args[1] === "read") {
     await readContentCommand(command === "post" ? "posts" : "pages", args.slice(2));
+    process.exit(0);
+  }
+
+  if (command === "publish" || command === "update") {
+    await platformCommand(command, args.slice(1));
     process.exit(0);
   }
 
@@ -158,6 +169,25 @@ async function openCommand(args: string[]): Promise<void> {
   console.log(target.type === "server" ? `Opened ${target.url}` : `Opened ${target.path}`);
 }
 
+async function platformCommand(action: SkillCommandAction, args: string[]): Promise<void> {
+  const json = hasFlag(args, "--json");
+  const platform = parsePlatform(args.find((arg) => !arg.startsWith("--")));
+  const ref = args.filter((arg) => !arg.startsWith("--"))[1];
+  const input = {
+    action,
+    platform,
+    ref,
+    status: wordpressStatus(args),
+    visibility: mastodonVisibility(args),
+  };
+  const config = await loadConfig(process.cwd());
+  const workspace = await createWorkspace(process.cwd());
+  const skills = await loadSkills({ config, workspace });
+  const result = await runSkillCommand(skills, input);
+
+  console.log(formatSkillCommandResult(input, result, { json }));
+}
+
 async function listContentCommand(kind: ContentKind, args: string[]): Promise<void> {
   const workspace = await createWorkspace(process.cwd());
   console.log(formatContentList(await listContent(workspace, kind), kind, {
@@ -178,6 +208,46 @@ async function readContentCommand(kind: ContentKind, args: string[]): Promise<vo
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
+}
+
+function parsePlatform(value: string | undefined): SkillCommandPlatform {
+  if (value === "wordpress" || value === "mastodon" || value === "github-pages") {
+    return value;
+  }
+  if (value === "github" || value === "pages") {
+    return "github-pages";
+  }
+  throw new Error("Usage: reef publish <wordpress|mastodon|github-pages> [slug|path|number] [--json]");
+}
+
+function wordpressStatus(args: string[]): "draft" | "publish" | undefined {
+  if (args.includes("--draft")) {
+    return "draft";
+  }
+  if (args.includes("--publish")) {
+    return "publish";
+  }
+  const value = flagValue(args, "--status");
+  return value === "draft" || value === "publish" ? value : undefined;
+}
+
+function mastodonVisibility(
+  args: string[],
+): "public" | "unlisted" | "private" | "direct" | undefined {
+  const value = flagValue(args, "--visibility");
+  return value === "public" || value === "unlisted" || value === "private" || value === "direct"
+    ? value
+    : undefined;
+}
+
+function flagValue(args: string[], flag: string): string | undefined {
+  const inline = args.find((arg) => arg.startsWith(`${flag}=`));
+  if (inline) {
+    return inline.slice(flag.length + 1);
+  }
+
+  const index = args.indexOf(flag);
+  return index === -1 ? undefined : args[index + 1];
 }
 
 async function runInteractiveHarness(): Promise<void> {
@@ -240,6 +310,11 @@ Usage:
   reef pages [--json]
   reef post read <slug|path|number> [--json]
   reef page read <slug|path|number> [--json]
+  reef publish wordpress <slug|path|number> [--draft] [--json]
+  reef update wordpress <slug|path|number> [--json]
+  reef publish mastodon <slug|path|number> [--visibility public|unlisted|private|direct] [--json]
+  reef update mastodon <slug|path|number> [--json]
+  reef publish github-pages [--json]
   reef open
   reef open post hello
   reef open page about
