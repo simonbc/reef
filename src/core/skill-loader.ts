@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
-import { join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, join, resolve } from "node:path";
 import type { ReefConfig } from "./config";
 import type { SkillDef, ToolContext, ToolDef, WorkspaceAPI } from "../skill-api";
 
@@ -17,14 +17,17 @@ export type LoadedSkill = {
 export async function loadSkills(input: {
   config: ReefConfig;
   workspace: WorkspaceAPI;
+  builtInSkillsDir?: string;
 }): Promise<LoadedSkill[]> {
-  const skillsDir = resolve(input.config.root, "skills");
-  const entries = await readSkillDirs(skillsDir);
+  const skillRoots = [
+    input.builtInSkillsDir ?? defaultBuiltInSkillsDir(),
+    resolve(input.config.root, "skills"),
+  ];
   const loaded: LoadedSkill[] = [];
   const seenNames = new Set<string>();
 
-  for (const dirName of entries) {
-    const skillDir = join(skillsDir, dirName);
+  for (const { root, dirName } of await readSkillDirs(skillRoots)) {
+    const skillDir = join(root, dirName);
     const manifestPath = join(skillDir, "skill.toml");
     const indexPath = join(skillDir, "index.ts");
 
@@ -116,16 +119,24 @@ function parseSkillManifest(source: string): {
   };
 }
 
-async function readSkillDirs(skillsDir: string): Promise<string[]> {
-  try {
-    const entries = await readdir(skillsDir, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .sort();
-  } catch {
-    return [];
+async function readSkillDirs(skillRoots: string[]): Promise<{ root: string; dirName: string }[]> {
+  const dirs: { root: string; dirName: string }[] = [];
+
+  for (const root of skillRoots) {
+    try {
+      const entries = await readdir(root, { withFileTypes: true });
+      dirs.push(
+        ...entries
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => ({ root, dirName: entry.name }))
+          .sort((a, b) => a.dirName.localeCompare(b.dirName)),
+      );
+    } catch {
+      // Missing skill roots are valid for empty runtimes.
+    }
   }
+
+  return dirs;
 }
 
 function envSecretsFor(skillName: string): Record<string, string> {
@@ -139,4 +150,8 @@ function envSecretsFor(skillName: string): Record<string, string> {
   }
 
   return secrets;
+}
+
+function defaultBuiltInSkillsDir(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../skills");
 }

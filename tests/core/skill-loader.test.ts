@@ -26,6 +26,7 @@ describe("loadSkills", () => {
     const skills = await loadSkills({
       config: config(root, { alpha: { url: "https://example.com" } }),
       workspace: await createWorkspace(root),
+      builtInSkillsDir: join(root, "no-builtins"),
     });
 
     expect(skills).toHaveLength(1);
@@ -50,6 +51,7 @@ describe("loadSkills", () => {
     const skills = await loadSkills({
       config: config(root),
       workspace: await createWorkspace(root),
+      builtInSkillsDir: join(root, "no-builtins"),
     });
 
     expect(skills).toHaveLength(1);
@@ -74,6 +76,7 @@ describe("loadSkills", () => {
     const skills = await loadSkills({
       config: config(root),
       workspace: await createWorkspace(root),
+      builtInSkillsDir: join(root, "no-builtins"),
     });
 
     expect(skills.map((skill) => skill.status)).toEqual(["loaded", "error"]);
@@ -89,6 +92,7 @@ describe("loadSkills", () => {
     const skills = await loadSkills({
       config: config(root),
       workspace: await createWorkspace(root),
+      builtInSkillsDir: join(root, "no-builtins"),
     });
 
     expect(skills).toHaveLength(1);
@@ -97,6 +101,25 @@ describe("loadSkills", () => {
       status: "error",
     });
     expect(skills[0].error).toContain("skill.toml");
+  });
+
+  test("loads built-in skills when the runtime directory has no local skills", async () => {
+    const runtimeRoot = await tempRoot();
+    const builtinsRoot = await tempRoot();
+    await writeSkill(builtinsRoot, "posts", {
+      manifestName: "posts",
+      codeName: "posts",
+      version: "0.1.0",
+    });
+
+    const skills = await loadSkills({
+      config: config(runtimeRoot),
+      workspace: await createWorkspace(runtimeRoot),
+      builtInSkillsDir: join(builtinsRoot, "skills"),
+    });
+
+    expect(skills.map((skill) => skill.name)).toEqual(["posts"]);
+    expect(skills[0].status).toBe("loaded");
   });
 });
 
