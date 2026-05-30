@@ -1,11 +1,20 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { defineSkill, defineTool } from "../../src/skill-api";
 import { parseMarkdown } from "../../src/core/markdown";
+import {
+  appendConfigTemplate,
+  configString,
+  fetchJson,
+  isPublishedState,
+  parseSetupInput,
+  postStateKey,
+  readOptionalFile,
+  resolvePostPath,
+  skillConfigPath,
+} from "../../src/core/skill-helpers";
 
 type Visibility = "public" | "unlisted" | "private" | "direct";
-type SetupInput = { location: "global" | "project" };
 
 const DEFAULT_ACCESS_TOKEN_ENV = "REEF_MASTODON_ACCESS_TOKEN";
 const DEFAULT_CHARACTER_LIMIT = 500;
@@ -39,7 +48,7 @@ export default defineSkill({
       },
       run: async (input, ctx) => {
         const parsed = parseSetupInput(input);
-        const target = mastodonConfigPath(ctx, parsed.location);
+        const target = skillConfigPath(ctx, parsed.location);
         const existing = await readOptionalFile(target);
         if (/\[mastodon\]/.test(existing)) {
           return `Mastodon config already exists in ${target}. Fill in the values there.`;
@@ -94,7 +103,7 @@ export default defineSkill({
           status: parsed.status,
           visibility: parsed.visibility,
         });
-        await ctx.workspace.skillState.write("mastodon", stateKey(slug), {
+        await ctx.workspace.skillState.write("mastodon", postStateKey(slug), {
           id: published.id,
           url: published.url,
         });
@@ -147,7 +156,7 @@ export default defineSkill({
           status,
           visibility: parsed.visibility,
         });
-        await ctx.workspace.skillState.write("mastodon", stateKey(path), {
+        await ctx.workspace.skillState.write("mastodon", postStateKey(path), {
           id: published.id,
           url: published.url,
         });
@@ -177,7 +186,7 @@ export default defineSkill({
           return `Post not found: ${path}`;
         }
 
-        const state = await ctx.workspace.skillState.read("mastodon", stateKey(path));
+        const state = await ctx.workspace.skillState.read("mastodon", postStateKey(path));
         if (!isPublishedState(state)) {
           return `No Mastodon status is recorded for ${path}. Publish it to Mastodon first.`;
         }
@@ -200,7 +209,7 @@ export default defineSkill({
           id: state.id,
           status,
         });
-        await ctx.workspace.skillState.write("mastodon", stateKey(path), {
+        await ctx.workspace.skillState.write("mastodon", postStateKey(path), {
           id: updated.id,
           url: updated.url,
         });
@@ -211,36 +220,6 @@ export default defineSkill({
   ],
 });
 
-function parseSetupInput(input: unknown): SetupInput {
-  if (!input || typeof input !== "object") {
-    return { location: "global" };
-  }
-
-  const location = (input as Record<string, unknown>).location;
-  return {
-    location: location === "project" ? "project" : "global",
-  };
-}
-
-function mastodonConfigPath(
-  ctx: { config: Record<string, unknown>; workspace: { root: string } },
-  location: "global" | "project",
-): string {
-  if (location === "project") {
-    return join(ctx.workspace.root, "reef.toml");
-  }
-
-  return configString(ctx.config.__global_config_path) ?? join(homedir(), ".reef", "config.toml");
-}
-
-async function readOptionalFile(path: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    return "";
-  }
-}
-
 function appendMastodonTemplate(existing: string): string {
   const template = [
     "[mastodon]",
@@ -249,7 +228,7 @@ function appendMastodonTemplate(existing: string): string {
     "",
   ].join("\n");
 
-  return existing.trim() ? `${existing.replace(/\s*$/, "\n\n")}${template}` : template;
+  return appendConfigTemplate(existing, template);
 }
 
 function parseStatusInput(input: unknown): { status: string; visibility: Visibility } {
@@ -282,19 +261,6 @@ function parsePostInput(input: unknown): { path: string; visibility: Visibility 
     path: record.path.trim(),
     visibility: parseVisibility(record.visibility),
   };
-}
-
-async function resolvePostPath(
-  path: string,
-  ctx: { workspace: { listPosts(): Promise<{ path: string }[]> } },
-): Promise<string> {
-  if (!/^\d+$/.test(path)) {
-    return path;
-  }
-
-  const index = Number(path) - 1;
-  const posts = await ctx.workspace.listPosts();
-  return posts[index]?.path ?? path;
 }
 
 function parseVisibility(value: unknown): Visibility {
@@ -338,7 +304,7 @@ async function publishToMastodon(input: {
   visibility: Visibility;
 }): Promise<{ id: string; url: string }> {
   const baseUrl = input.instance.replace(/\/+$/, "");
-  const response = await fetch(`${baseUrl}/api/v1/statuses`, {
+  const json = await fetchJson("Mastodon", `${baseUrl}/api/v1/statuses`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${input.accessToken}`,
@@ -349,11 +315,6 @@ async function publishToMastodon(input: {
       visibility: input.visibility,
     }),
   });
-
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(`Mastodon API error ${response.status}: ${JSON.stringify(json)}`);
-  }
 
   return {
     id: typeof json.id === "string" ? json.id : "",
@@ -368,7 +329,7 @@ async function updateMastodonStatus(input: {
   status: string;
 }): Promise<{ id: string; url: string }> {
   const baseUrl = input.instance.replace(/\/+$/, "");
-  const response = await fetch(`${baseUrl}/api/v1/statuses/${input.id}`, {
+  const json = await fetchJson("Mastodon", `${baseUrl}/api/v1/statuses/${input.id}`, {
     method: "PUT",
     headers: {
       authorization: `Bearer ${input.accessToken}`,
@@ -378,11 +339,6 @@ async function updateMastodonStatus(input: {
       status: input.status,
     }),
   });
-
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(`Mastodon API error ${response.status}: ${JSON.stringify(json)}`);
-  }
 
   return {
     id: typeof json.id === "string" ? json.id : input.id,
@@ -412,23 +368,6 @@ function characterLimit(config: Record<string, unknown>): number {
   return typeof config.character_limit === "number" && Number.isFinite(config.character_limit)
     ? config.character_limit
     : DEFAULT_CHARACTER_LIMIT;
-}
-
-function configString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function stateKey(path: string): string {
-  return `post:${path.replace(/^posts\//, "").replace(/\.md$/, "")}`;
-}
-
-function isPublishedState(value: unknown): value is { id: string; url: string } {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    typeof (value as Record<string, unknown>).id === "string" &&
-    typeof (value as Record<string, unknown>).url === "string"
-  );
 }
 
 function statusSlug(status: string): string {

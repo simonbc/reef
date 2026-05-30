@@ -1,8 +1,19 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { defineSkill, defineTool } from "../../src/skill-api";
 import { parseMarkdown } from "../../src/core/markdown";
+import {
+  appendConfigTemplate,
+  configString,
+  fetchJson,
+  isPublishedState,
+  parseSetupInput,
+  postStateKey,
+  readOptionalFile,
+  resolvePostPath,
+  skillConfigPath,
+  type SetupLocation,
+} from "../../src/core/skill-helpers";
 
 type PublishInput = {
   path: string;
@@ -12,10 +23,6 @@ type PublishInput = {
 type UpdateInput = {
   path: string;
   status?: "draft" | "publish";
-};
-
-type SetupInput = {
-  location: "global" | "project";
 };
 
 export default defineSkill({
@@ -47,7 +54,7 @@ export default defineSkill({
       },
       run: async (input, ctx) => {
         const parsed = parseSetupInput(input);
-        const target = wordpressConfigPath(ctx, parsed.location);
+        const target = skillConfigPath(ctx, parsed.location);
         const existing = await readOptionalFile(target);
         if (/\[wordpress\]/.test(existing)) {
           return `WordPress config already exists in ${target}. Fill in the values there.`;
@@ -103,7 +110,7 @@ export default defineSkill({
           html: post.html,
           status: parsed.status,
         });
-        await ctx.workspace.skillState.write("wordpress", stateKey(path), {
+        await ctx.workspace.skillState.write("wordpress", postStateKey(path), {
           id: published.id,
           url: published.url,
         });
@@ -139,7 +146,7 @@ export default defineSkill({
           return `Post not found: ${path}`;
         }
 
-        const state = await ctx.workspace.skillState.read("wordpress", stateKey(path));
+        const state = await ctx.workspace.skillState.read("wordpress", postStateKey(path));
         if (!isPublishedState(state)) {
           return `No WordPress post is recorded for ${path}. Publish it to WordPress first.`;
         }
@@ -159,7 +166,7 @@ export default defineSkill({
           html: post.html,
           status: parsed.status,
         });
-        await ctx.workspace.skillState.write("wordpress", stateKey(path), {
+        await ctx.workspace.skillState.write("wordpress", postStateKey(path), {
           id: updated.id,
           url: updated.url,
         });
@@ -201,37 +208,7 @@ function wordpressConfigMessage(): string {
   ].join(" ");
 }
 
-function parseSetupInput(input: unknown): SetupInput {
-  if (!input || typeof input !== "object") {
-    return { location: "global" };
-  }
-
-  const location = (input as Record<string, unknown>).location;
-  return {
-    location: location === "project" ? "project" : "global",
-  };
-}
-
-function wordpressConfigPath(
-  ctx: { config: Record<string, unknown>; workspace: { root: string } },
-  location: "global" | "project",
-): string {
-  if (location === "project") {
-    return join(ctx.workspace.root, "reef.toml");
-  }
-
-  return configString(ctx.config.__global_config_path) ?? join(homedir(), ".reef", "config.toml");
-}
-
-async function readOptionalFile(path: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    return "";
-  }
-}
-
-function appendWordPressTemplate(existing: string, location: "global" | "project"): string {
+function appendWordPressTemplate(existing: string, location: SetupLocation): string {
   const template =
     location === "global"
       ? [
@@ -247,7 +224,7 @@ function appendWordPressTemplate(existing: string, location: "global" | "project
           "",
         ].join("\n");
 
-  return existing.trim() ? `${existing.replace(/\s*$/, "\n\n")}${template}` : template;
+  return appendConfigTemplate(existing, template);
 }
 
 function parsePublishInput(input: unknown): PublishInput {
@@ -288,19 +265,6 @@ function parseUpdateInput(input: unknown): UpdateInput {
   };
 }
 
-async function resolvePostPath(
-  path: string,
-  ctx: { workspace: { listPosts(): Promise<{ path: string }[]> } },
-): Promise<string> {
-  if (!/^\d+$/.test(path)) {
-    return path;
-  }
-
-  const index = Number(path) - 1;
-  const posts = await ctx.workspace.listPosts();
-  return posts[index]?.path ?? path;
-}
-
 async function publishToWordPress(input: {
   url: string;
   username: string;
@@ -313,7 +277,7 @@ async function publishToWordPress(input: {
   const endpoint = `${baseUrl}/wp-json/wp/v2/posts`;
   const credentials = btoa(`${input.username}:${input.appPassword}`);
 
-  const response = await fetch(endpoint, {
+  const json = await fetchJson("WordPress", endpoint, {
     method: "POST",
     headers: {
       authorization: `Basic ${credentials}`,
@@ -325,11 +289,6 @@ async function publishToWordPress(input: {
       status: input.status,
     }),
   });
-
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(`WordPress API error ${response.status}: ${JSON.stringify(json)}`);
-  }
 
   return wordpressPostResult(json, "");
 }
@@ -355,7 +314,7 @@ async function updateWordPressPost(input: {
     body.status = input.status;
   }
 
-  const response = await fetch(endpoint, {
+  const json = await fetchJson("WordPress", endpoint, {
     method: "POST",
     headers: {
       authorization: `Basic ${credentials}`,
@@ -364,16 +323,7 @@ async function updateWordPressPost(input: {
     body: JSON.stringify(body),
   });
 
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(`WordPress API error ${response.status}: ${JSON.stringify(json)}`);
-  }
-
   return wordpressPostResult(json, input.id);
-}
-
-function configString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function wordpressPostResult(json: unknown, fallbackId: string): { id: string; url: string } {
@@ -385,17 +335,4 @@ function wordpressPostResult(json: unknown, fallbackId: string): { id: string; u
         : fallbackId,
     url: typeof record.link === "string" ? record.link : "(no link returned)",
   };
-}
-
-function stateKey(path: string): string {
-  return `post:${path.replace(/^posts\//, "").replace(/\.md$/, "")}`;
-}
-
-function isPublishedState(value: unknown): value is { id: string; url: string } {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    typeof (value as Record<string, unknown>).id === "string" &&
-    typeof (value as Record<string, unknown>).url === "string"
-  );
 }
