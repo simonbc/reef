@@ -15,7 +15,6 @@ Then run Reef from any runtime directory:
 ```sh
 reef
 reef skill list
-reef build
 reef posts --json
 ```
 
@@ -42,15 +41,12 @@ reef posts --json
 reef pages --json
 reef post read 1 --json
 reef page read about --json
-reef build
 reef publish wordpress 1 --json
 reef update wordpress 1 --json
 reef publish mastodon 1 --visibility unlisted --json
 reef update mastodon 1 --json
-reef publish github-pages --json
 reef setup wordpress --json
 reef setup mastodon --json
-reef setup github-pages --json
 ```
 
 Markdown in `posts/` and `pages/` remains canonical source. Publish/update
@@ -62,34 +58,31 @@ platform ids and URLs.
 ```sh
 bun run reef
 bun run reef skill list
-bun run reef build
 bun run reef open
 bun run reef open post hello
 bun run reef open page about
 bun run reef "publish posts/hello.md to my wordpress"
-bun run reef "publish my site to github pages"
 bun run reef "post hello from Reef to mastodon"
-bun run reef "make the site feel like a clean personal notebook"
+bun run reef "draft a short post about Reef"
 ```
 
-Running `reef` with no arguments starts the terminal harness and serves the built
-site at `http://localhost:3000`.
+Running `reef` with no arguments starts the terminal harness and serves the local
+workspace app at `http://localhost:3000`.
 
 The terminal shows `>` when Reef is ready for a prompt:
 
 ```text
-Built 4 files into dist/.
-Serving site at http://localhost:3000
-Type a prompt, /build, or /exit.
+Serving Reef workspace at http://localhost:3000
+Type a prompt or /exit.
 > 
 ```
 
-`http://localhost:3000/` is the site itself, not a Reef admin UI.
+`http://localhost:3000/` is a Reef app over local markdown source. It live-renders
+posts and pages for inspection; it is not a preview of a generated site.
 
 Inside the harness, slash commands are available for common local actions:
 
 ```text
-/build
 /posts
 /pages
 /open
@@ -102,7 +95,7 @@ Inside the harness, slash commands are available for common local actions:
 /exit
 ```
 
-You can also ask Reef to open built pages in the browser:
+You can also ask Reef to open local posts and pages in the browser:
 
 ```text
 let me view my latest post
@@ -130,19 +123,11 @@ anthropic_key_env = "ANTHROPIC_API_KEY"
 [wordpress]
 url = "https://example.wordpress.com"
 
-[github-pages]
-repo = "git@github.com:you/you.github.io.git"
-branch = "gh-pages"
-
 [mastodon]
 instance = "https://mastodon.social"
 
 [wordpress.personal]
 url = "https://personal.wordpress.com"
-
-[github-pages.personal]
-repo = "git@github.com:you/you.github.io.git"
-branch = "gh-pages"
 ```
 
 Use project config for the local runtime identity and project-specific overrides:
@@ -150,13 +135,9 @@ Use project config for the local runtime identity and project-specific overrides
 ```toml
 title = "My Reef"
 domain = "https://example.com"
-
-[github-pages]
-branch = "project-pages"
 ```
 
-Project config wins over global config. In the example above, Reef uses the
-global GitHub Pages repo but publishes to the project-specific branch.
+Project config wins over global config.
 
 WordPress publishing reads the site URL from `[wordpress].url` in merged config.
 The agent can create a fill-in template for you:
@@ -193,15 +174,6 @@ WordPress post:
 bun run reef "update posts/hello.md on wordpress"
 ```
 
-GitHub Pages publishing expects `dist/` to exist and reads its target repository
-from `[github-pages].repo` in merged config. `[github-pages].branch` defaults to
-`gh-pages` when omitted:
-
-```sh
-bun run reef build
-bun run reef "publish my site to github pages"
-```
-
 Mastodon publishing uses `[mastodon].instance` and a manually generated access
 token for now. Create a
 Mastodon application in your instance's Development settings with
@@ -235,31 +207,4 @@ the edited markdown source:
 
 ```sh
 bun run reef "update posts/hello.md on mastodon"
-```
-
-## Theme
-
-Design source lives in canonical theme files:
-
-```text
-theme/layout.html
-theme/styles.css
-```
-
-`reef build` uses those files when present. If they do not exist, Reef uses a
-small default theme.
-
-The theme skill can read or replace them through prompts:
-
-```sh
-bun run reef "show me the current theme"
-bun run reef "make the site feel like a clean personal notebook"
-bun run reef "make the background warm and the post list more spacious"
-```
-
-Theme update tools rebuild `dist/` automatically. To inspect or rebuild manually:
-
-```sh
-bun run reef build
-open dist/index.html
 ```

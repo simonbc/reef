@@ -26,18 +26,18 @@ describe("config commands", () => {
 
   test("sets section config values", async () => {
     const root = await tempRoot();
-    await writeFile(join(root, "reef.toml"), 'title = "Old"\n\n[github-pages]\nbranch = "main"\n');
+    await writeFile(join(root, "reef.toml"), 'title = "Old"\n\n[mastodon]\nvisibility = "unlisted"\n');
 
-    await setProjectConfigValue(root, "github-pages.branch", "gh-pages");
-    await setProjectConfigValue(root, "github-pages.repo", "git@github.com:simonbc/site.git");
+    await setProjectConfigValue(root, "mastodon.visibility", "public");
+    await setProjectConfigValue(root, "mastodon.instance", "https://mastodon.social");
 
     expect(await readFile(join(root, "reef.toml"), "utf8")).toBe(
       [
         'title = "Old"',
         "",
-        "[github-pages]",
-        'branch = "gh-pages"',
-        'repo = "git@github.com:simonbc/site.git"',
+        "[mastodon]",
+        'visibility = "public"',
+        'instance = "https://mastodon.social"',
         "",
       ].join("\n"),
     );

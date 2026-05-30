@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHarnessApp } from "../../src/core/harness";
@@ -11,10 +11,9 @@ afterEach(async () => {
 });
 
 describe("createHarnessApp", () => {
-  test("serves the built site at the root", async () => {
+  test("serves the live workspace app at the root", async () => {
     const root = await tempRoot();
     const app = createHarnessApp({ root });
-    await app.fetch(new Request("http://reef.local/__reef/build", { method: "POST" }));
 
     const shell = await app.fetch(new Request("http://reef.local/")).then((res) => res.text());
     expect(shell).toContain("Harness Reef");
@@ -22,7 +21,7 @@ describe("createHarnessApp", () => {
     expect(shell).toContain("new EventSource('/__reef/events')");
   });
 
-  test("notifies connected browsers after builds", async () => {
+  test("exposes a browser event stream", async () => {
     const root = await tempRoot();
     const app = createHarnessApp({ root });
     const events = await app.fetch(new Request("http://reef.local/__reef/events"));
@@ -33,26 +32,12 @@ describe("createHarnessApp", () => {
 
     const connected = new TextDecoder().decode((await reader.read()).value);
     expect(connected).toContain(": connected");
-
-    await app.fetch(new Request("http://reef.local/__reef/build", { method: "POST" }));
-
-    const reload = new TextDecoder().decode((await reader.read()).value);
-    expect(reload).toContain("event: reload");
     await reader.cancel();
   });
 
-  test("build endpoint writes dist for the terminal harness", async () => {
+  test("renders posts from markdown on request", async () => {
     const root = await tempRoot();
     const app = createHarnessApp({ root });
-
-    const build = await app
-      .fetch(new Request("http://reef.local/__reef/build", { method: "POST" }))
-      .then((res) => res.json());
-
-    expect(build).toMatchObject({ ok: true, files: expect.arrayContaining(["dist/index.html"]) });
-    await expect(readFile(join(root, "dist", "index.html"), "utf8")).resolves.toContain(
-      "Harness Reef",
-    );
 
     const post = await app
       .fetch(new Request("http://reef.local/posts/hello/"))
@@ -60,10 +45,9 @@ describe("createHarnessApp", () => {
     expect(post).toContain("<h1>Hello</h1>");
   });
 
-  test("does not serve files outside dist", async () => {
+  test("does not serve files outside the workspace content routes", async () => {
     const root = await tempRoot();
     const app = createHarnessApp({ root });
-    await app.fetch(new Request("http://reef.local/__reef/build", { method: "POST" }));
 
     const response = await app.fetch(new Request("http://reef.local/../reef.toml"));
 

@@ -34,15 +34,6 @@ describe("skill commands", () => {
     expect(calls).toEqual([{ path: "posts/hello.md" }]);
   });
 
-  test("runs github pages publish without a ref", async () => {
-    const result = await runSkillCommand(
-      [loadedSkill("github-pages", "publish_site", async () => "published site")],
-      { action: "publish", platform: "github-pages" },
-    );
-
-    expect(result).toBe("published site");
-  });
-
   test("runs setup commands", async () => {
     const calls: unknown[] = [];
     const result = await runSkillCommand(

@@ -4,11 +4,11 @@ import { resolveViewTarget, type OpenRunner } from "../../src/core/open";
 export default defineSkill({
   name: "open",
   systemPrompt:
-    "Use open_view_latest_post when the user asks to view, open, or look at their latest post in the browser. Use open_view_post or open_view_page for named built posts/pages. Use open_server for the local site.",
+    "Use open_view_latest_post when the user asks to view, open, or look at their latest post in the browser. Use open_view_post or open_view_page for named local posts/pages in the Reef workspace app. Use open_server for the local app.",
   tools: [
     defineTool({
       name: "server",
-      description: "Open the local Reef site server in the browser.",
+      description: "Open the local Reef workspace app in the browser.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -21,7 +21,7 @@ export default defineSkill({
     }),
     defineTool({
       name: "view_latest_post",
-      description: "Open the latest local post's built page in the browser.",
+      description: "Open the latest local post in the browser.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -44,7 +44,7 @@ export default defineSkill({
     }),
     defineTool({
       name: "view_post",
-      description: "Open a named local post's built page in the browser.",
+      description: "Open a named local post in the browser.",
       inputSchema: {
         type: "object",
         properties: {
@@ -68,7 +68,7 @@ export default defineSkill({
     }),
     defineTool({
       name: "view_page",
-      description: "Open a named local page's built page in the browser.",
+      description: "Open a named local page in the browser.",
       inputSchema: {
         type: "object",
         properties: {

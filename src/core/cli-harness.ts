@@ -17,7 +17,6 @@ export type CliHarnessOptions = {
     history: ChatTurn[],
     onEvent: (event: AgentEvent) => void,
   ) => Promise<string>;
-  runBuild?: () => Promise<string>;
   runOpen?: (args: string[]) => Promise<OpenTarget>;
   listPosts?: () => Promise<PostMeta[]>;
   listPages?: () => Promise<PageMeta[]>;
@@ -55,10 +54,9 @@ export async function runCliHarness(options: CliHarnessOptions): Promise<void> {
     }
 
     if (prompt === "/build") {
-      const result = options.runBuild
-        ? await options.runBuild()
-        : "No build command is available.";
-      options.output.write(`${result}\n> `);
+      options.output.write(
+        "Builds are no longer part of the local runtime. Reef serves markdown live.\n> ",
+      );
       continue;
     }
 

@@ -53,7 +53,6 @@ bun test
 bun run check
 bun run reef
 bun run reef skill list
-bun run reef build
 bun run reef posts --json
 bun run reef post read 1 --json
 bun run reef publish wordpress 1 --json
@@ -73,8 +72,8 @@ Prefer this flow from agent harnesses:
 
 1. Inspect local source with `reef posts --json`, `reef pages --json`, and
    `reef post read <slug|path|number> --json`.
-2. Edit canonical markdown/theme/config files directly.
-3. Run `reef build` after content or theme changes that should affect the site.
+2. Edit canonical markdown/config files directly.
+3. Use bare `reef` for the local workspace app when browser inspection matters.
 4. Publish only after explicit user intent with `reef publish <platform> ...`.
 5. Update existing remote objects with `reef update <platform> ...` when Reef has
    recorded platform state.
@@ -92,10 +91,8 @@ reef publish wordpress <slug|path|number> [--draft] [--json]
 reef update wordpress <slug|path|number> [--json]
 reef publish mastodon <slug|path|number> [--visibility public|unlisted|private|direct] [--json]
 reef update mastodon <slug|path|number> [--json]
-reef publish github-pages [--json]
 reef setup wordpress [--project] [--json]
 reef setup mastodon [--project] [--json]
-reef setup github-pages [--project] [--json]
 ```
 
 Do not bypass markdown source. If a user asks to publish new content, create or
@@ -136,11 +133,10 @@ The current primary product boundary is the local runtime plus agent-operable
 CLI/skill surface. The built-in prompt harness exists as a convenience REPL and
 dogfooding surface, not as the place for unique product logic.
 
-Current M2 harness behavior: bare `reef` starts a terminal prompt loop and a
-local site server. The terminal shows `>` when ready for a prompt. The local
-server serves the built site itself at `http://localhost:3000/`, not a Reef admin
-UI. Keep the browser surface as the user’s website until there is a clear reason
-to add a separate web UI.
+Current harness behavior: bare `reef` starts a terminal prompt loop and a local
+workspace app. The terminal shows `>` when ready for a prompt. The local server
+live-renders markdown from `posts/` and `pages/` at `http://localhost:3000/`.
+The browser surface is a publishing workspace, not a preview of a generated site.
 
 ## Canonical Workspace
 
@@ -270,14 +266,10 @@ Global config may also contain reusable named accounts:
 ```toml
 [wordpress.personal]
 url = "https://personal.wordpress.com"
-
-[github-pages.personal]
-repo = "git@github.com:simonbc/simonbc.github.io.git"
-branch = "gh-pages"
 ```
 
-Config may contain identity, domains, subscriptions, theme config, preferences,
-skill config, and reusable account targets.
+Config may contain identity, domains, subscriptions, preferences, skill config,
+and reusable account targets.
 
 Secrets do not belong in `reef.toml`. Use environment variables for the current
 early implementation; move toward `reef secret set <skill>.<name>` and encrypted
@@ -374,36 +366,8 @@ Skills determine how content maps onto external systems.
 
 WordPress owns presentation. Reef primarily publishes content.
 
-GitHub Pages owns no presentation layer. Reef must render the full site.
-
 Deleting local source should not automatically delete remote content. Prefer
 explicit unpublish/remove tools.
-
-## Themes
-
-Themes are optional rendering layers used primarily for website outputs.
-
-Theme files are canonical design source:
-
-```text
-theme/layout.html
-theme/styles.css
-```
-
-`dist/` is generated output and should not be edited directly. Do not let theme
-implementation leak into the source model for posts/pages.
-
-Current theme placeholders:
-
-- `{{title}}`
-- `{{siteTitle}}`
-- `{{heading}}`
-- `{{content}}`
-
-`theme/layout.html` must include `{{content}}`.
-
-Theme update tools rebuild `dist/` automatically after writing canonical theme
-files. This keeps preview/publish from using stale generated output.
 
 ## Architecture Boundaries
 
@@ -414,7 +378,6 @@ Current source layout:
 - `src/skill-api/`: public API for skills
 - `skills/`: built-in skills using the same shape as third-party skills
 - `posts/`, `pages/`, `media/`: workspace content
-- `theme/layout.html`, `theme/styles.css`: canonical design source
 
 Keep `src/skill-api/` small and stable. If a helper is only needed by one skill,
 put it in that skill or `src/core/` until a second real use appears.
@@ -442,27 +405,6 @@ Requires:
 - app password/token
 
 WordPress owns presentation. Reef primarily publishes content.
-
-## GitHub Pages Skill
-
-Purpose: publish full static websites.
-
-Responsibilities:
-
-- render markdown to HTML
-- apply themes/CSS
-- generate site structure
-- publish via git/GitHub API
-
-GitHub Pages owns no presentation layer. Reef must render the full site.
-
-Current build contract:
-
-- `reef build` writes `dist/index.html`, per-post pages, per-page pages,
-  `dist/feed.json`, and `dist/styles.css`.
-- `github-pages_publish_site` publishes the existing `dist/` directory to the
-  configured branch. It should not silently build first; explicit build keeps the
-  generated artifact inspectable before publishing.
 
 ## Testing Expectations
 

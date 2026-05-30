@@ -36,9 +36,9 @@ describe("loadConfig", () => {
         "[wordpress]",
         'url = "https://global.wordpress.com"',
         "",
-        "[github-pages]",
-        'repo = "git@github.com:simonbc/global-site.git"',
-        'branch = "gh-pages"',
+        "[mastodon]",
+        'instance = "https://global.mastodon.social"',
+        'visibility = "unlisted"',
       ].join("\n"),
     );
     await writeFile(
@@ -47,8 +47,8 @@ describe("loadConfig", () => {
         'title = "Project Reef"',
         'domain = "https://project.example"',
         "",
-        "[github-pages]",
-        'branch = "project-pages"',
+        "[mastodon]",
+        'visibility = "public"',
       ].join("\n"),
     );
 
@@ -61,9 +61,9 @@ describe("loadConfig", () => {
         wordpress: {
           url: "https://global.wordpress.com",
         },
-        "github-pages": {
-          repo: "git@github.com:simonbc/global-site.git",
-          branch: "project-pages",
+        mastodon: {
+          instance: "https://global.mastodon.social",
+          visibility: "public",
         },
       },
       globalAccounts: {},
@@ -79,9 +79,9 @@ describe("loadConfig", () => {
         "[wordpress.personal]",
         'url = "https://personal.wordpress.com"',
         "",
-        "[github-pages.personal]",
-        'repo = "git@github.com:simonbc/simonbc.github.io.git"',
-        'branch = "main"',
+        "[mastodon.personal]",
+        'instance = "https://mastodon.social"',
+        'visibility = "unlisted"',
       ].join("\n"),
     );
 
@@ -93,10 +93,10 @@ describe("loadConfig", () => {
           url: "https://personal.wordpress.com",
         },
       },
-      "github-pages": {
+      mastodon: {
         personal: {
-          repo: "git@github.com:simonbc/simonbc.github.io.git",
-          branch: "main",
+          instance: "https://mastodon.social",
+          visibility: "unlisted",
         },
       },
     });

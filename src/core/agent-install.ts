@@ -20,7 +20,7 @@ const reefAgentSection = `## Reef Agent Operation
 
 When working here, use Reef as the local runtime. Markdown in \`posts/\` and \`pages/\` is canonical source.
 Inspect content with \`reef posts --json\`, \`reef pages --json\`, and \`reef post read <slug|path|number> --json\`.
-Edit canonical markdown, theme, and config files directly. Run \`reef build\` after content or theme changes that should affect the site.
+Edit canonical markdown and config files directly. Bare \`reef\` serves a local workspace app that live-renders markdown.
 Do not publish or update remote platforms without explicit user intent.
 `;
 

@@ -36,7 +36,7 @@ describe("agent install commands", () => {
     expect(parseFrontMatter(installed)).toEqual({
       name: "reef",
       description:
-        "Use when working with a Reef runtime from Codex: inspect posts/pages/config, edit canonical markdown/theme/config files, build the local site, run the dev harness, set up publishing targets, and publish or update WordPress, Mastodon, or GitHub Pages through Reef CLI commands.",
+        "Use when working with a Reef runtime from Codex: inspect posts/pages/config, edit canonical markdown/config files, run the local workspace app, set up publishing targets, and publish or update WordPress or Mastodon through Reef CLI commands.",
       "short-description": "Operate a Reef runtime from Codex",
     });
   });

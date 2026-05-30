@@ -1,8 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
-import { buildSite } from "./build";
 import { loadConfig } from "./config";
-import { createWorkspace } from "./workspace";
+import { createLivePreview } from "./live-preview";
 
 export type HarnessApp = {
   fetch(request: Request): Promise<Response>;
@@ -10,13 +7,20 @@ export type HarnessApp = {
 
 export function createHarnessApp(input: { root: string }): HarnessApp {
   const reloadClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+  let preview: ReturnType<typeof createLivePreview> | null = null;
   return {
-    fetch: (request) => handleRequest(input.root, request, reloadClients),
+    fetch: async (request) => {
+      if (!preview) {
+        const config = await loadConfig(input.root);
+        preview = createLivePreview({ root: input.root, title: config.title });
+      }
+      return handleRequest(preview, request, reloadClients);
+    },
   };
 }
 
 async function handleRequest(
-  root: string,
+  preview: ReturnType<typeof createLivePreview>,
   request: Request,
   reloadClients: Set<ReadableStreamDefaultController<Uint8Array>>,
 ): Promise<Response> {
@@ -26,50 +30,11 @@ async function handleRequest(
     return reloadEventStream(reloadClients);
   }
 
-  if (url.pathname === "/__reef/build" && request.method === "POST") {
-    const config = await loadConfig(root);
-    const workspace = await createWorkspace(root);
-    const result = await buildSite({
-      title: config.title,
-      domain: config.domain,
-      workspace,
-    });
-    notifyReload(reloadClients);
-    return jsonResponse({ ok: true, files: result.files });
+  const response = await preview.render(url.pathname);
+  if (response.headers.get("content-type")?.startsWith("text/html")) {
+    return htmlResponse(injectReloadScript(await response.text()), response.status);
   }
-
-  if (url.pathname === "/") {
-    return staticFile(root, "index.html");
-  }
-
-  return staticFile(root, decodeURIComponent(url.pathname.replace(/^\/+/, "")));
-}
-
-async function staticFile(root: string, relativePath: string): Promise<Response> {
-  const distRoot = resolve(root, "dist");
-  const normalizedPath =
-    relativePath === "" || relativePath.endsWith("/")
-      ? join(relativePath, "index.html")
-      : relativePath;
-  const fullPath = resolve(distRoot, normalizedPath);
-  if (!isInsideDirectory(distRoot, fullPath)) {
-    return htmlResponse(unbuiltSite(), 404);
-  }
-
-  try {
-    const body = await readFile(fullPath);
-    if (contentType(fullPath).startsWith("text/html")) {
-      return htmlResponse(injectReloadScript(new TextDecoder().decode(body)));
-    }
-
-    return new Response(body, {
-      headers: {
-        "content-type": contentType(fullPath),
-      },
-    });
-  } catch {
-    return htmlResponse(unbuiltSite(), 404);
-  }
+  return response;
 }
 
 function reloadEventStream(
@@ -100,19 +65,6 @@ function reloadEventStream(
   });
 }
 
-function notifyReload(clients: Set<ReadableStreamDefaultController<Uint8Array>>): void {
-  const encoder = new TextEncoder();
-  const payload = encoder.encode("event: reload\ndata: built\n\n");
-
-  for (const client of [...clients]) {
-    try {
-      client.enqueue(payload);
-    } catch {
-      clients.delete(client);
-    }
-  }
-}
-
 function injectReloadScript(html: string): string {
   if (html.includes("/__reef/events")) {
     return html;
@@ -130,43 +82,9 @@ function injectReloadScript(html: string): string {
   return html.includes("</body>") ? html.replace("</body>", `${script}</body>`) : `${html}${script}`;
 }
 
-function unbuiltSite(): string {
-  return [
-    "<!doctype html>",
-    "<html><body>",
-    "<h1>Not built yet</h1>",
-    "<p>Run <code>reef build</code> or type <code>/build</code> in the Reef terminal harness.</p>",
-    "</body></html>",
-  ].join("");
-}
-
 function htmlResponse(body: string, status = 200): Response {
   return new Response(body, {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
-}
-
-function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function contentType(path: string): string {
-  if (path.endsWith(".css")) {
-    return "text/css; charset=utf-8";
-  }
-  if (path.endsWith(".json")) {
-    return "application/json; charset=utf-8";
-  }
-  return "text/html; charset=utf-8";
-}
-
-function isInsideDirectory(parent: string, child: string): boolean {
-  const childRelativePath = relative(parent, child);
-  return (
-    childRelativePath === "" ||
-    (!childRelativePath.startsWith("..") && !childRelativePath.startsWith(sep))
-  );
 }

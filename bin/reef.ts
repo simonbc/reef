@@ -9,7 +9,6 @@ import {
   installAgentSupport,
 } from "../src/core/agent-install";
 import { runAgentOnce, type AgentEvent, type ChatTurn } from "../src/core/agent";
-import { buildSite } from "../src/core/build";
 import { runCliHarness } from "../src/core/cli-harness";
 import {
   formatContentList,
@@ -63,8 +62,7 @@ try {
   }
 
   if (command === "build") {
-    await build();
-    process.exit(0);
+    throw new Error("`reef build` was removed. Run `reef` to inspect the live workspace app.");
   }
 
   if (command === "posts" || command === "pages") {
@@ -140,22 +138,6 @@ async function runPromptText(
     history,
     onEvent,
   });
-}
-
-async function build(): Promise<void> {
-  console.log(await buildText());
-}
-
-async function buildText(): Promise<string> {
-  const config = await loadConfig(process.cwd());
-  const workspace = await createWorkspace(process.cwd());
-  const result = await buildSite({
-    title: config.title,
-    domain: config.domain,
-    workspace,
-  });
-
-  return `Built ${result.files.length} files into dist/.`;
 }
 
 async function listSkills(): Promise<void> {
@@ -287,13 +269,10 @@ function hasFlag(args: string[], flag: string): boolean {
 }
 
 function parsePlatform(value: string | undefined): SkillCommandPlatform {
-  if (value === "wordpress" || value === "mastodon" || value === "github-pages") {
+  if (value === "wordpress" || value === "mastodon") {
     return value;
   }
-  if (value === "github" || value === "pages") {
-    return "github-pages";
-  }
-  throw new Error("Usage: reef publish <wordpress|mastodon|github-pages> [slug|path|number] [--json]");
+  throw new Error("Usage: reef publish <wordpress|mastodon> <slug|path|number> [--json]");
 }
 
 function wordpressStatus(args: string[]): "draft" | "publish" | undefined {
@@ -337,8 +316,6 @@ function flagValue(args: string[], flag: string): string | undefined {
 }
 
 async function runInteractiveHarness(): Promise<void> {
-  console.log(await buildText());
-
   const app = createHarnessApp({ root: process.cwd() });
   const port = Number(process.env.REEF_PORT ?? 3000);
   const server = Bun.serve({
@@ -346,8 +323,8 @@ async function runInteractiveHarness(): Promise<void> {
     fetch: app.fetch,
   });
 
-  console.log(`Serving site at http://localhost:${server.port}`);
-  console.log("Type a prompt, /build, or /exit.");
+  console.log(`Serving Reef workspace at http://localhost:${server.port}`);
+  console.log("Type a prompt or /exit.");
 
   const readline = createInterface({
     input: process.stdin,
@@ -362,7 +339,6 @@ async function runInteractiveHarness(): Promise<void> {
       output: process.stdout,
       runPrompt: (prompt, history, onEvent) =>
         runPromptText(prompt, history, onEvent, server.port),
-      runBuild: buildText,
       runOpen: async (args) =>
         resolveOpenTarget({
           root: process.cwd(),
@@ -395,7 +371,6 @@ Usage:
   reef agent init codex [--json]
   reef config show [--json]
   reef config set <key|section.key> <value> [--json]
-  reef build
   reef posts [--json]
   reef pages [--json]
   reef post read <slug|path|number> [--json]
@@ -404,10 +379,8 @@ Usage:
   reef update wordpress <slug|path|number> [--json]
   reef publish mastodon <slug|path|number> [--visibility public|unlisted|private|direct] [--json]
   reef update mastodon <slug|path|number> [--json]
-  reef publish github-pages [--json]
   reef setup wordpress [--project] [--json]
   reef setup mastodon [--project] [--json]
-  reef setup github-pages [--project] [--json]
   reef open
   reef open post hello
   reef open page about

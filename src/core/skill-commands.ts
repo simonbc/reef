@@ -2,7 +2,7 @@ import type { LoadedSkill } from "./skill-loader";
 import type { ToolResult } from "../skill-api";
 
 export type SkillCommandAction = "publish" | "update" | "setup";
-export type SkillCommandPlatform = "wordpress" | "mastodon" | "github-pages";
+export type SkillCommandPlatform = "wordpress" | "mastodon";
 
 export type SkillCommandInput = {
   action: SkillCommandAction;
@@ -61,13 +61,6 @@ function skillToolInput(input: SkillCommandInput): {
       toolName: "setup_config",
       toolInput: { location: input.location ?? "global" },
     };
-  }
-
-  if (input.platform === "github-pages") {
-    if (input.action !== "publish") {
-      throw new Error("GitHub Pages supports publish, not update.");
-    }
-    return { toolName: "publish_site", toolInput: {} };
   }
 
   if (!input.ref) {

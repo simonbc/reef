@@ -9,18 +9,18 @@ describe("runCliHarness", () => {
     await runCliHarness({
       prompts: asyncLines(["make it nicer", "exit"]),
       output: { write: (chunk) => writes.push(chunk) },
-      runPrompt: async () => "# Done\n\n- Updated **theme**",
+      runPrompt: async () => "# Done\n\n- Updated **post**",
       spinnerFactory: () => ({
         start: () => spinnerEvents.push("start"),
         stop: () => spinnerEvents.push("stop"),
       }),
     });
 
-    expect(writes.join("")).toBe("> Done\n\n• Updated theme\n> ");
+    expect(writes.join("")).toBe("> Done\n\n• Updated post\n> ");
     expect(spinnerEvents).toEqual(["start", "stop"]);
   });
 
-  test("supports build slash command without invoking the agent", async () => {
+  test("reports that build slash command is no longer available", async () => {
     const writes: string[] = [];
     const prompts: string[] = [];
 
@@ -31,14 +31,15 @@ describe("runCliHarness", () => {
         prompts.push(prompt);
         return "should not run";
       },
-      runBuild: async () => "Built 4 files into dist/.",
       spinnerFactory: () => ({
         start: () => {},
         stop: () => {},
       }),
     });
 
-    expect(writes.join("")).toBe("> Built 4 files into dist/.\n> ");
+    expect(writes.join("")).toBe(
+      "> Builds are no longer part of the local runtime. Reef serves markdown live.\n> ",
+    );
     expect(prompts).toEqual([]);
   });
 
@@ -141,8 +142,8 @@ describe("runCliHarness", () => {
       output: { write: (chunk) => writes.push(chunk) },
       runPrompt: async (_prompt, _history, onEvent) => {
         onEvent({ type: "phase", message: "Loading skills" });
-        onEvent({ type: "tool_start", name: "theme_read", input: {} });
-        onEvent({ type: "tool_result", name: "theme_read", result: "theme text" });
+        onEvent({ type: "tool_start", name: "posts_read", input: {} });
+        onEvent({ type: "tool_result", name: "posts_read", result: "post text" });
         return "Done";
       },
       spinnerFactory: () => ({
@@ -152,7 +153,7 @@ describe("runCliHarness", () => {
     });
 
     expect(writes.join("")).toBe(
-      ">   Loading skills...\n  theme.read...\n  theme.read done\nDone\n> ",
+      ">   Loading skills...\n  posts.read...\n  posts.read done\nDone\n> ",
     );
   });
 
@@ -165,13 +166,13 @@ describe("runCliHarness", () => {
       runPrompt: async (_prompt, _history, onEvent) => {
         onEvent({
           type: "tool_start",
-          name: "theme_update_css",
-          input: { path: "theme/styles.css" },
+          name: "posts_update",
+          input: { path: "posts/hello.md" },
         });
         onEvent({
           type: "tool_result",
-          name: "theme_update_css",
-          result: "Updated theme/styles.css",
+          name: "posts_update",
+          result: "Updated posts/hello.md",
         });
         return "Done";
       },
@@ -182,7 +183,7 @@ describe("runCliHarness", () => {
     });
 
     expect(writes.join("")).toBe(
-      '> Debug output on.\n>   tool theme_update_css {"path":"theme/styles.css"}\n  result theme_update_css Updated theme/styles.css\nDone\n> Debug output off.\n> ',
+      '> Debug output on.\n>   tool posts_update {"path":"posts/hello.md"}\n  result posts_update Updated posts/hello.md\nDone\n> Debug output off.\n> ',
     );
   });
 });

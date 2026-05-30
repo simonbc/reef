@@ -13,7 +13,7 @@ describe("open skill", () => {
     expect(opened).toEqual([{ type: "server", url: "http://localhost:3000" }]);
   });
 
-  test("opens the latest post built URL", async () => {
+  test("opens the latest post URL", async () => {
     const opened: OpenTarget[] = [];
 
     const result = await tool("view_latest_post").run(
@@ -31,7 +31,7 @@ describe("open skill", () => {
     expect(opened).toEqual([{ type: "url", url: "http://localhost:3000/posts/newer/" }]);
   });
 
-  test("opens named built post and page URLs", async () => {
+  test("opens named post and page URLs", async () => {
     const opened: OpenTarget[] = [];
     const ctx = context({ opened });
 

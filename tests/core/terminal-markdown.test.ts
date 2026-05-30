@@ -7,7 +7,7 @@ describe("renderTerminalMarkdown", () => {
       [
         "# Done",
         "",
-        "Updated **theme/styles.css** and `reef build`.",
+        "Updated **posts/hello.md** and `reef publish wordpress hello`.",
         "",
         "- [Preview](https://example.com)",
         "- *Publish* next",
@@ -19,7 +19,7 @@ describe("renderTerminalMarkdown", () => {
       [
         "Done",
         "",
-        "Updated theme/styles.css and reef build.",
+        "Updated posts/hello.md and reef publish wordpress hello.",
         "",
         "• Preview (https://example.com)",
         "• Publish next",
@@ -29,10 +29,10 @@ describe("renderTerminalMarkdown", () => {
 
   test("renders fenced code blocks without markdown fences", () => {
     const rendered = renderTerminalMarkdown(
-      ["Here:", "", "```sh", "reef build", "```"].join("\n"),
+      ["Here:", "", "```sh", "reef posts --json", "```"].join("\n"),
       { colors: false },
     );
 
-    expect(rendered).toBe(["Here:", "", "  reef build"].join("\n"));
+    expect(rendered).toBe(["Here:", "", "  reef posts --json"].join("\n"));
   });
 });

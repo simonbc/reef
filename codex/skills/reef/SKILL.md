@@ -1,6 +1,6 @@
 ---
 name: reef
-description: "Use when working with a Reef runtime from Codex: inspect posts/pages/config, edit canonical markdown/theme/config files, build the local site, run the dev harness, set up publishing targets, and publish or update WordPress, Mastodon, or GitHub Pages through Reef CLI commands."
+description: "Use when working with a Reef runtime from Codex: inspect posts/pages/config, edit canonical markdown/config files, run the local workspace app, set up publishing targets, and publish or update WordPress or Mastodon through Reef CLI commands."
 metadata:
   short-description: Operate a Reef runtime from Codex
 ---
@@ -13,7 +13,6 @@ agent harness; Reef is the source/state/publishing runtime.
 ## Core Rules
 
 - Markdown in `posts/` and `pages/` is canonical source.
-- Theme source lives in `theme/layout.html` and `theme/styles.css`.
 - Project config lives in `reef.toml`; user config lives in `~/.reef/config.toml`.
 - Platform ids/URLs live in `.reef/skill-state/`.
 - Do not publish/update remote platforms unless the user explicitly asks.
@@ -46,8 +45,6 @@ Edit canonical files directly when practical:
 ```text
 posts/*.md
 pages/*.md
-theme/layout.html
-theme/styles.css
 reef.toml
 ```
 
@@ -56,18 +53,17 @@ For simple project config edits, prefer:
 ```sh
 reef config set title "Site Title" --json
 reef config set domain "https://example.com" --json
-reef config set github-pages.branch gh-pages --json
 ```
 
-## Build And Preview
+## Local App
 
 ```sh
-reef build
 reef
 ```
 
-Bare `reef` starts the local harness/server. The served site is at
-`http://localhost:3000/`. Browser tabs auto-refresh when the harness rebuilds.
+Bare `reef` starts the terminal harness and local workspace app at
+`http://localhost:3000/`. The app live-renders markdown from `posts/` and
+`pages/`; it is not a preview of a generated site.
 
 ## Setup
 
@@ -76,7 +72,6 @@ Use setup commands to create fill-in templates. Do not invent secret values.
 ```sh
 reef setup wordpress --json
 reef setup mastodon --json
-reef setup github-pages --json
 ```
 
 Use `--project` when the config should be written to local `reef.toml` instead
@@ -91,7 +86,6 @@ reef publish wordpress <slug|path|number> --json
 reef update wordpress <slug|path|number> --json
 reef publish mastodon <slug|path|number> --visibility public --json
 reef update mastodon <slug|path|number> --json
-reef publish github-pages --json
 ```
 
 If update reports that no platform state is recorded, explain that Reef needs an
@@ -105,8 +99,4 @@ After changing Reef code, run:
 bun run check
 ```
 
-After changing a Reef runtime/site, run:
-
-```sh
-reef build
-```
+After changing a Reef runtime workspace, run `reef` to inspect the local app.

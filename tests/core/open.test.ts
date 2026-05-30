@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe("resolveViewTarget", () => {
-  test("resolves built post and page URLs", async () => {
+  test("resolves live post and page URLs", async () => {
     await expect(resolveViewTarget({ kind: "post", slug: "hello", port: 3001 })).resolves.toEqual({
       type: "url",
       url: "http://localhost:3001/posts/hello/",

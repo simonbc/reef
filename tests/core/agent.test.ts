@@ -141,13 +141,13 @@ describe("runAgentOnce", () => {
       skills: [],
       history: [
         { role: "user", content: "make it a notebook" },
-        { role: "assistant", content: "Done. I updated the theme." },
+        { role: "assistant", content: "Done. I updated the post." },
       ],
     });
 
     expect(requestBody?.messages).toEqual([
       { role: "user", content: "make it a notebook" },
-      { role: "assistant", content: "Done. I updated the theme." },
+      { role: "assistant", content: "Done. I updated the post." },
       { role: "user", content: "make it warmer" },
     ]);
   });
@@ -214,8 +214,8 @@ describe("runAgentOnce", () => {
             {
               type: "tool_use",
               id: "toolu_publish",
-              name: "github-pages_publish_site",
-              input: {},
+              name: "wordpress_publish_post",
+              input: { path: "1" },
             },
           ],
         });
@@ -233,8 +233,8 @@ describe("runAgentOnce", () => {
       anthropicApiKey: "test-key",
       skills: [
         loadedSkill({
-          name: "github-pages",
-          toolName: "publish_site",
+          name: "wordpress",
+          toolName: "publish_post",
           toolRun: async () => {
             toolRan = true;
             return "published";
@@ -251,15 +251,15 @@ describe("runAgentOnce", () => {
         type: "tool_result",
         tool_use_id: "toolu_publish",
         content:
-          "Blocked github-pages_publish_site. Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
+          "Blocked wordpress_publish_post. Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
         is_error: true,
       },
     ]);
     expect(events).toContainEqual({
       type: "tool_error",
-      name: "github-pages_publish_site",
+      name: "wordpress_publish_post",
       error:
-        "Blocked github-pages_publish_site. Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
+        "Blocked wordpress_publish_post. Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
     });
   });
 
@@ -276,8 +276,8 @@ describe("runAgentOnce", () => {
             {
               type: "tool_use",
               id: "toolu_publish",
-              name: "github-pages_publish_site",
-              input: {},
+              name: "wordpress_publish_post",
+              input: { path: "1" },
             },
           ],
         });
@@ -289,13 +289,13 @@ describe("runAgentOnce", () => {
     }) as typeof fetch;
 
     const result = await runAgentOnce({
-      prompt: "publish my site to github pages",
+      prompt: "publish post 1 to wordpress",
       model: "claude-test",
       anthropicApiKey: "test-key",
       skills: [
         loadedSkill({
-          name: "github-pages",
-          toolName: "publish_site",
+          name: "wordpress",
+          toolName: "publish_post",
           toolRun: async () => {
             toolRan = true;
             return "published";
