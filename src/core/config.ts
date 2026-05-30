@@ -46,29 +46,24 @@ function parseSimpleToml(source: string, path: string): {
   top: Record<string, unknown>;
   sections: Record<string, Record<string, unknown>>;
 } {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = Bun.TOML.parse(source) as Record<string, unknown>;
+  } catch (error) {
+    const lineNumber = tomlErrorLine(error);
+    const line = lineNumber ? ` at line ${lineNumber}` : "";
+    throw new Error(`Invalid TOML in ${path}${line}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   const top: Record<string, unknown> = {};
   const sections: Record<string, Record<string, unknown>> = {};
-  let current = top;
 
-  const lines = source.split(/\r?\n/);
-  for (const [index, rawLine] of lines.entries()) {
-    const line = rawLine.replace(/\s+#.*$/, "").trim();
-    if (!line) {
-      continue;
+  for (const [key, value] of Object.entries(parsed)) {
+    if (isPlainRecord(value)) {
+      flattenTomlTable(key, value, sections);
+    } else {
+      top[key] = value;
     }
-
-    const section = /^\[([A-Za-z0-9_.-]+)\]$/.exec(line);
-    if (section) {
-      current = sections[section[1]] ??= {};
-      continue;
-    }
-
-    const kv = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
-    if (!kv) {
-      throw new Error(`Invalid TOML in ${path} at line ${index + 1}: ${rawLine}`);
-    }
-
-    current[kv[1]] = parseTomlScalar(kv[2]);
   }
 
   return { top, sections };
@@ -117,19 +112,52 @@ function mergeSkillConfig(
   return { flat, accounts };
 }
 
-function parseTomlScalar(value: string): unknown {
-  const trimmed = value.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1);
+function flattenTomlTable(
+  section: string,
+  values: Record<string, unknown>,
+  sections: Record<string, Record<string, unknown>>,
+): void {
+  const scalars: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(values)) {
+    if (isPlainRecord(value)) {
+      flattenTomlTable(`${section}.${key}`, value, sections);
+    } else {
+      scalars[key] = value;
+    }
   }
-  if (trimmed === "true") {
-    return true;
+
+  if (Object.keys(scalars).length > 0) {
+    sections[section] = scalars;
   }
-  if (trimmed === "false") {
-    return false;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function tomlErrorLine(error: unknown): number | undefined {
+  const errors =
+    typeof error === "object" && error !== null && "errors" in error
+      ? (error as { errors?: unknown }).errors
+      : undefined;
+  if (Array.isArray(errors)) {
+    const nestedLine = errors
+      .map((item) =>
+        typeof item === "object" && item !== null && "line" in item
+          ? (item as { line?: unknown }).line
+          : undefined,
+      )
+      .find((line): line is number => typeof line === "number");
+    if (nestedLine !== undefined) {
+      return nestedLine + 1;
+    }
   }
-  const numeric = Number(trimmed);
-  return Number.isFinite(numeric) ? numeric : trimmed;
+
+  return typeof error === "object" && error !== null && "line" in error &&
+    typeof (error as { line?: unknown }).line === "number"
+    ? Number((error as { line: number }).line)
+    : undefined;
 }
 
 function stringValue(value: unknown, fallback: string): string {
