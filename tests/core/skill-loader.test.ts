@@ -121,6 +121,30 @@ describe("loadSkills", () => {
     expect(skills.map((skill) => skill.name)).toEqual(["posts"]);
     expect(skills[0].status).toBe("loaded");
   });
+
+  test("does not import project skills unless the workspace trusts them", async () => {
+    const root = await tempRoot();
+    await writeSkill(root, "alpha", {
+      manifestName: "alpha",
+      codeName: "alpha",
+      version: "0.1.0",
+      moduleBody: 'throw new Error("should not import untrusted skill");',
+    });
+
+    const skills = await loadSkills({
+      config: config(root, {}, false),
+      workspace: await createWorkspace(root),
+      builtInSkillsDir: join(root, "no-builtins"),
+    });
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0]).toMatchObject({
+      name: "alpha",
+      status: "error",
+    });
+    expect(skills[0].error).toContain("project skill is not trusted");
+    expect(skills[0].error).not.toContain("should not import");
+  });
 });
 
 async function tempRoot(): Promise<string> {
@@ -132,7 +156,7 @@ async function tempRoot(): Promise<string> {
 async function writeSkill(
   root: string,
   dirName: string,
-  input: { manifestName: string; codeName: string; version: string },
+  input: { manifestName: string; codeName: string; version: string; moduleBody?: string },
 ): Promise<void> {
   const dir = join(root, "skills", dirName);
   await mkdir(dir, { recursive: true });
@@ -142,30 +166,34 @@ async function writeSkill(
   );
   await writeFile(
     join(dir, "index.ts"),
-    [
-      "export default {",
-      `  name: "${input.codeName}",`,
-      '  systemPrompt: "alpha prompt",',
-      "  tools: [{",
-      '    name: "ping",',
-      '    description: "Ping the skill.",',
-      '    inputSchema: { type: "object", properties: {} },',
-      '    run: async () => "pong",',
-      "  }],",
-      "};",
-    ].join("\n"),
+    input.moduleBody ??
+      [
+        "export default {",
+        `  name: "${input.codeName}",`,
+        '  systemPrompt: "alpha prompt",',
+        "  tools: [{",
+        '    name: "ping",',
+        '    description: "Ping the skill.",',
+        '    inputSchema: { type: "object", properties: {} },',
+        '    run: async () => "pong",',
+        "  }],",
+        "};",
+      ].join("\n"),
   );
 }
 
 function config(
   root: string,
   skillConfig: ReefConfig["skillConfig"] = {},
+  trustProjectSkills = true,
 ): ReefConfig {
   return {
     root,
     title: "Test",
     domain: "",
     anthropicKeyEnv: "ANTHROPIC_API_KEY",
+    trustProjectSkills,
     skillConfig,
+    globalAccounts: {},
   };
 }

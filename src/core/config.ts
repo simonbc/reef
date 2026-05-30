@@ -7,6 +7,7 @@ export type ReefConfig = {
   title: string;
   domain: string;
   anthropicKeyEnv: string;
+  trustProjectSkills: boolean;
   skillConfig: Record<string, Record<string, unknown>>;
   globalAccounts: Record<string, Record<string, Record<string, unknown>>>;
 };
@@ -33,6 +34,7 @@ export async function loadConfig(
       project.top.anthropic_key_env,
       stringValue(global.top.anthropic_key_env, "ANTHROPIC_API_KEY"),
     ),
+    trustProjectSkills: booleanValue(project.top.trust_project_skills, false),
     skillConfig: mergedSkillConfig.flat,
     globalAccounts: mergedSkillConfig.accounts,
   };
@@ -132,6 +134,10 @@ function parseTomlScalar(value: string): unknown {
 
 function stringValue(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
+}
+
+function booleanValue(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function basenameTitle(root: string): string {

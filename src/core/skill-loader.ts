@@ -22,20 +22,29 @@ export async function loadSkills(input: {
   openRunner?: OpenRunner;
   openPort?: number;
 }): Promise<LoadedSkill[]> {
+  const builtInSkillsDir = resolve(input.builtInSkillsDir ?? defaultBuiltInSkillsDir());
+  const projectSkillsDir = resolve(input.config.root, "skills");
   const skillRoots = [
-    input.builtInSkillsDir ?? defaultBuiltInSkillsDir(),
-    resolve(input.config.root, "skills"),
+    { root: builtInSkillsDir, trusted: true },
+    ...(projectSkillsDir === builtInSkillsDir
+      ? []
+      : [{ root: projectSkillsDir, trusted: input.config.trustProjectSkills }]),
   ];
-  const uniqueSkillRoots = [...new Set(skillRoots.map((root) => resolve(root)))];
   const loaded: LoadedSkill[] = [];
   const seenNames = new Set<string>();
 
-  for (const { root, dirName } of await readSkillDirs(uniqueSkillRoots)) {
+  for (const { root, dirName, trusted } of await readSkillDirs(skillRoots)) {
     const skillDir = join(root, dirName);
     const manifestPath = join(skillDir, "skill.toml");
     const indexPath = join(skillDir, "index.ts");
 
     try {
+      if (!trusted) {
+        throw new Error(
+          "project skill is not trusted. Set trust_project_skills = true in reef.toml to load local skill code.",
+        );
+      }
+
       const manifest = parseSkillManifest(await readFile(manifestPath, "utf8"));
       if (seenNames.has(manifest.name)) {
         throw new Error(`duplicate skill name: ${manifest.name}`);
@@ -131,16 +140,18 @@ function parseSkillManifest(source: string): {
   };
 }
 
-async function readSkillDirs(skillRoots: string[]): Promise<{ root: string; dirName: string }[]> {
-  const dirs: { root: string; dirName: string }[] = [];
+async function readSkillDirs(
+  skillRoots: { root: string; trusted: boolean }[],
+): Promise<{ root: string; dirName: string; trusted: boolean }[]> {
+  const dirs: { root: string; dirName: string; trusted: boolean }[] = [];
 
-  for (const root of skillRoots) {
+  for (const { root, trusted } of skillRoots) {
     try {
       const entries = await readdir(root, { withFileTypes: true });
       dirs.push(
         ...entries
           .filter((entry) => entry.isDirectory())
-          .map((entry) => ({ root, dirName: entry.name }))
+          .map((entry) => ({ root, dirName: entry.name, trusted }))
           .sort((a, b) => a.dirName.localeCompare(b.dirName)),
       );
     } catch {

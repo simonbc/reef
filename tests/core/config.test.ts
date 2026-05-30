@@ -20,6 +20,7 @@ describe("loadConfig", () => {
       title: root.split("/").at(-1),
       domain: "",
       anthropicKeyEnv: "ANTHROPIC_API_KEY",
+      trustProjectSkills: false,
       skillConfig: {},
       globalAccounts: {},
     });
@@ -57,6 +58,7 @@ describe("loadConfig", () => {
       title: "Project Reef",
       domain: "https://project.example",
       anthropicKeyEnv: "GLOBAL_ANTHROPIC_KEY",
+      trustProjectSkills: false,
       skillConfig: {
         wordpress: {
           url: "https://global.wordpress.com",
@@ -110,6 +112,7 @@ describe("loadConfig", () => {
         'title = "Simon\'s Blog"',
         'domain = "simonbc.com"',
         'anthropic_key_env = "REEF_ANTHROPIC_KEY"',
+        "trust_project_skills = true",
         "",
         "[wordpress]",
         'url = "https://example.wordpress.com"',
@@ -121,6 +124,7 @@ describe("loadConfig", () => {
       title: "Simon's Blog",
       domain: "simonbc.com",
       anthropicKeyEnv: "REEF_ANTHROPIC_KEY",
+      trustProjectSkills: true,
       skillConfig: {
         wordpress: {
           url: "https://example.wordpress.com",
