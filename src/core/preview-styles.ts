@@ -1,0 +1,17 @@
+export const PREVIEW_CSS = [
+  "body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background: #f6f7f8; color: #1f2328; }",
+  "header { border-bottom: 1px solid #d8dee4; background: #ffffff; }",
+  ".bar { max-width: 880px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }",
+  "main { max-width: 880px; margin: 0 auto; padding: 24px 20px 48px; }",
+  "h1 { margin: 0; font-size: 22px; font-weight: 680; }",
+  "h2 { margin: 0 0 12px; font-size: 15px; text-transform: uppercase; letter-spacing: 0; color: #57606a; }",
+  ".panel { background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 18px; margin-bottom: 16px; }",
+  "ol { margin: 0; padding-left: 22px; }",
+  "li { margin: 8px 0; }",
+  "a { color: #0969da; text-decoration: none; }",
+  "a:hover { text-decoration: underline; }",
+  "article { background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 24px; }",
+  "article h1 { font-size: 28px; margin-bottom: 16px; }",
+  "article p { line-height: 1.55; }",
+  ".label { color: #57606a; font-size: 13px; }",
+].join("\n");
