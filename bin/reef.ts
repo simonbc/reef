@@ -2,6 +2,12 @@
 
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
+import {
+  formatAgentInstallResult,
+  formatAgentProjectInitResult,
+  initAgentProject,
+  installAgentSupport,
+} from "../src/core/agent-install";
 import { runAgentOnce, type AgentEvent, type ChatTurn } from "../src/core/agent";
 import { buildSite } from "../src/core/build";
 import { runCliHarness } from "../src/core/cli-harness";
@@ -43,6 +49,11 @@ try {
 
   if (command === "skill" && args[1] === "list") {
     await listSkills();
+    process.exit(0);
+  }
+
+  if (command === "agent") {
+    await agentCommand(args.slice(1));
     process.exit(0);
   }
 
@@ -192,6 +203,32 @@ async function configCommand(args: string[]): Promise<void> {
   }
 
   throw new Error("Usage: reef config show [--json] | reef config set <key|section.key> <value> [--json]");
+}
+
+async function agentCommand(args: string[]): Promise<void> {
+  const subcommand = args[0];
+  const harness = args.find((arg, index) => index > 0 && !arg.startsWith("--"));
+  const json = hasFlag(args, "--json");
+
+  if (subcommand === "install") {
+    if (!harness) {
+      throw new Error("Usage: reef agent install codex [--json]");
+    }
+    const result = await installAgentSupport({ harness });
+    console.log(formatAgentInstallResult(result, { json }));
+    return;
+  }
+
+  if (subcommand === "init") {
+    if (!harness) {
+      throw new Error("Usage: reef agent init codex [--json]");
+    }
+    const result = await initAgentProject({ harness, root: process.cwd() });
+    console.log(formatAgentProjectInitResult(result, { json }));
+    return;
+  }
+
+  throw new Error("Usage: reef agent install codex [--json] | reef agent init codex [--json]");
 }
 
 async function openCommand(args: string[]): Promise<void> {
@@ -354,6 +391,8 @@ function printUsage(): void {
 Usage:
   reef "publish posts/hello.md to my wordpress"
   reef skill list
+  reef agent install codex [--json]
+  reef agent init codex [--json]
   reef config show [--json]
   reef config set <key|section.key> <value> [--json]
   reef build

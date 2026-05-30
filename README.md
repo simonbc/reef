@@ -19,6 +19,19 @@ reef build
 reef posts --json
 ```
 
+To teach Codex how to operate Reef projects from an agent harness, install the
+global Codex skill once:
+
+```sh
+reef agent install codex
+```
+
+For a specific Reef project, optionally add project-local agent instructions:
+
+```sh
+reef agent init codex
+```
+
 ## Agent-Native CLI
 
 Reef is a local runtime. Agent harnesses such as Codex or Claude Code should
