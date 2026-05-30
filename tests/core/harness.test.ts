@@ -19,6 +19,26 @@ describe("createHarnessApp", () => {
     const shell = await app.fetch(new Request("http://reef.local/")).then((res) => res.text());
     expect(shell).toContain("Harness Reef");
     expect(shell).toContain("/posts/hello/");
+    expect(shell).toContain("new EventSource('/__reef/events')");
+  });
+
+  test("notifies connected browsers after builds", async () => {
+    const root = await tempRoot();
+    const app = createHarnessApp({ root });
+    const events = await app.fetch(new Request("http://reef.local/__reef/events"));
+    const reader = events.body?.getReader();
+    if (!reader) {
+      throw new Error("events response did not include a stream");
+    }
+
+    const connected = new TextDecoder().decode((await reader.read()).value);
+    expect(connected).toContain(": connected");
+
+    await app.fetch(new Request("http://reef.local/__reef/build", { method: "POST" }));
+
+    const reload = new TextDecoder().decode((await reader.read()).value);
+    expect(reload).toContain("event: reload");
+    await reader.cancel();
   });
 
   test("build endpoint writes dist for the terminal harness", async () => {

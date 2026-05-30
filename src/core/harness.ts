@@ -9,13 +9,22 @@ export type HarnessApp = {
 };
 
 export function createHarnessApp(input: { root: string }): HarnessApp {
+  const reloadClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
   return {
-    fetch: (request) => handleRequest(input.root, request),
+    fetch: (request) => handleRequest(input.root, request, reloadClients),
   };
 }
 
-async function handleRequest(root: string, request: Request): Promise<Response> {
+async function handleRequest(
+  root: string,
+  request: Request,
+  reloadClients: Set<ReadableStreamDefaultController<Uint8Array>>,
+): Promise<Response> {
   const url = new URL(request.url);
+
+  if (url.pathname === "/__reef/events") {
+    return reloadEventStream(reloadClients);
+  }
 
   if (url.pathname === "/__reef/build" && request.method === "POST") {
     const config = await loadConfig(root);
@@ -25,6 +34,7 @@ async function handleRequest(root: string, request: Request): Promise<Response> 
       domain: config.domain,
       workspace,
     });
+    notifyReload(reloadClients);
     return jsonResponse({ ok: true, files: result.files });
   }
 
@@ -48,6 +58,10 @@ async function staticFile(root: string, relativePath: string): Promise<Response>
 
   try {
     const body = await readFile(fullPath);
+    if (contentType(fullPath).startsWith("text/html")) {
+      return htmlResponse(injectReloadScript(new TextDecoder().decode(body)));
+    }
+
     return new Response(body, {
       headers: {
         "content-type": contentType(fullPath),
@@ -56,6 +70,64 @@ async function staticFile(root: string, relativePath: string): Promise<Response>
   } catch {
     return htmlResponse(unbuiltSite(), 404);
   }
+}
+
+function reloadEventStream(
+  clients: Set<ReadableStreamDefaultController<Uint8Array>>,
+): Response {
+  const encoder = new TextEncoder();
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controllerRef = controller;
+      clients.add(controller);
+      controller.enqueue(encoder.encode(": connected\n\n"));
+    },
+    cancel() {
+      if (controllerRef) {
+        clients.delete(controllerRef);
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    },
+  });
+}
+
+function notifyReload(clients: Set<ReadableStreamDefaultController<Uint8Array>>): void {
+  const encoder = new TextEncoder();
+  const payload = encoder.encode("event: reload\ndata: built\n\n");
+
+  for (const client of [...clients]) {
+    try {
+      client.enqueue(payload);
+    } catch {
+      clients.delete(client);
+    }
+  }
+}
+
+function injectReloadScript(html: string): string {
+  if (html.includes("/__reef/events")) {
+    return html;
+  }
+
+  const script = [
+    "<script>",
+    "(() => {",
+    "  const events = new EventSource('/__reef/events');",
+    "  events.addEventListener('reload', () => location.reload());",
+    "})();",
+    "</script>",
+  ].join("");
+
+  return html.includes("</body>") ? html.replace("</body>", `${script}</body>`) : `${html}${script}`;
 }
 
 function unbuiltSite(): string {
