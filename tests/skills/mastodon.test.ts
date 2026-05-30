@@ -74,7 +74,7 @@ describe("mastodon skill", () => {
     expect(createdPosts).toEqual([
       {
         slug: "hello-from-reef",
-        date: "2026-05-29",
+        date: new Date().toISOString().slice(0, 10),
         body: "Hello from Reef",
         title: "Hello from Reef",
       },
