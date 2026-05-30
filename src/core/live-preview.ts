@@ -1,7 +1,8 @@
-import { readFile, stat } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { parseMarkdown } from "./markdown";
 import { createWorkspace } from "./workspace";
+import { resolveContentReadCandidates } from "./workspace-paths";
 
 type LivePreview = {
   render(pathname: string): Promise<Response>;
@@ -9,6 +10,7 @@ type LivePreview = {
 
 type CachedDocument = {
   mtimeMs: number;
+  source: string;
   title: string;
   html: string;
 };
@@ -79,53 +81,47 @@ async function renderDocument(
   kind: "posts" | "pages",
   slug: string,
 ): Promise<Response> {
-  const fullPath = markdownPath(input.root, kind, slug);
-  if (!fullPath) {
+  const workspace = await createWorkspace(input.root);
+  const source = kind === "posts" ? await workspace.readPost(slug) : await workspace.readPage(slug);
+
+  if (!source) {
     return htmlResponse(appLayout(input.title, "Not found", "<p>Markdown source was not found.</p>"), 404);
   }
 
-  try {
-    const cached = await cachedMarkdown(input.cache, fullPath, slug);
-    return htmlResponse(
-      appLayout(
-        input.title,
-        cached.title,
-        `<article><h1>${escapeHtml(cached.title)}</h1>${cached.html}</article>`,
-      ),
-    );
-  } catch (error) {
-    if (isNotFound(error)) {
-      return htmlResponse(appLayout(input.title, "Not found", "<p>Markdown source was not found.</p>"), 404);
-    }
-    throw error;
-  }
+  const cached = await cachedMarkdown(input.cache, input.root, kind, slug, source);
+  return htmlResponse(
+    appLayout(
+      input.title,
+      cached.title,
+      `<article><h1>${escapeHtml(cached.title)}</h1>${cached.html}</article>`,
+    ),
+  );
 }
 
 async function cachedMarkdown(
   cache: Map<string, CachedDocument>,
-  fullPath: string,
+  root: string,
+  kind: "posts" | "pages",
   fallbackTitle: string,
+  source: string,
 ): Promise<{ title: string; html: string }> {
-  const info = await stat(fullPath);
-  const cached = cache.get(fullPath);
-  if (cached?.mtimeMs === info.mtimeMs) {
+  const fullPath = resolveContentReadCandidates(root, kind, fallbackTitle)[0];
+  const mtimeMs = fullPath ? await markdownMtime(fullPath) : 0;
+  const cacheKey = fullPath ?? `${kind}:${fallbackTitle}`;
+  const cached = cache.get(cacheKey);
+  if (cached?.mtimeMs === mtimeMs && cached.source === source) {
     return { title: cached.title, html: cached.html };
   }
 
-  const parsed = parseMarkdown(await readFile(fullPath, "utf8"), fallbackTitle);
+  const parsed = parseMarkdown(source, fallbackTitle);
   const next = {
-    mtimeMs: info.mtimeMs,
+    mtimeMs,
+    source,
     title: parsed.title ?? fallbackTitle,
     html: parsed.html,
   };
-  cache.set(fullPath, next);
+  cache.set(cacheKey, next);
   return { title: next.title, html: next.html };
-}
-
-function markdownPath(root: string, kind: "posts" | "pages", slug: string): string | null {
-  const fullPath = resolve(root, kind, `${slug.replace(/\/+$/, "")}.md`);
-  const parent = resolve(root, kind);
-  return isInsideDirectory(parent, fullPath) ? fullPath : null;
 }
 
 function contentSlug(pathname: string, kind: "posts" | "pages"): string | null {
@@ -195,19 +191,10 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function isInsideDirectory(parent: string, child: string): boolean {
-  const childRelativePath = relative(parent, child);
-  return (
-    childRelativePath === "" ||
-    (!childRelativePath.startsWith("..") && !childRelativePath.startsWith(sep))
-  );
-}
-
-function isNotFound(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "ENOENT"
-  );
+async function markdownMtime(fullPath: string): Promise<number> {
+  try {
+    return (await stat(fullPath)).mtimeMs;
+  } catch {
+    return 0;
+  }
 }

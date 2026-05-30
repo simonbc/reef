@@ -40,7 +40,7 @@ export async function loadConfig(
   return config;
 }
 
-function parseSimpleToml(source: string): {
+function parseSimpleToml(source: string, path: string): {
   top: Record<string, unknown>;
   sections: Record<string, Record<string, unknown>>;
 } {
@@ -48,7 +48,8 @@ function parseSimpleToml(source: string): {
   const sections: Record<string, Record<string, unknown>> = {};
   let current = top;
 
-  for (const rawLine of source.split(/\r?\n/)) {
+  const lines = source.split(/\r?\n/);
+  for (const [index, rawLine] of lines.entries()) {
     const line = rawLine.replace(/\s+#.*$/, "").trim();
     if (!line) {
       continue;
@@ -62,7 +63,7 @@ function parseSimpleToml(source: string): {
 
     const kv = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
     if (!kv) {
-      continue;
+      throw new Error(`Invalid TOML in ${path} at line ${index + 1}: ${rawLine}`);
     }
 
     current[kv[1]] = parseTomlScalar(kv[2]);
@@ -79,7 +80,7 @@ async function readOptionalToml(path: string): Promise<{
   if (!exists) {
     return { top: {}, sections: {} };
   }
-  return parseSimpleToml(await readFile(path, "utf8"));
+  return parseSimpleToml(await readFile(path, "utf8"), path);
 }
 
 function mergeSkillConfig(

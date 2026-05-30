@@ -102,7 +102,8 @@ export async function runAgentOnce(input: {
         continue;
       }
 
-      if (isRemoteWriteTool(toolUse.name) && !hasRemoteWriteIntent(input.prompt)) {
+      const remoteWriteIntent = remoteWriteIntentFor(input.prompt);
+      if (isRemoteWriteTool(toolUse.name) && remoteWriteIntent === "none") {
         const errorMessage = [
           `Blocked ${toolUse.name}.`,
           "Remote write tools require an explicit publish/deploy/push/post/update request in the current prompt.",
@@ -122,12 +123,13 @@ export async function runAgentOnce(input: {
       }
 
       try {
+        const toolInput = toolInputForIntent(toolUse.name, toolUse.input, remoteWriteIntent);
         input.onEvent?.({
           type: "tool_start",
           name: toolUse.name,
-          input: toolUse.input,
+          input: toolInput,
         });
-        const result = await item.tool.run(toolUse.input, item.skill.context);
+        const result = await item.tool.run(toolInput, item.skill.context);
         const resultText = toolResultText(result);
         input.onEvent?.({
           type: "tool_result",
@@ -237,8 +239,38 @@ function isRemoteWriteTool(name: string): boolean {
   return /\bpublish\b|publish_|_publish|deploy|push|\bupdate\b|update_|_update/.test(name);
 }
 
-function hasRemoteWriteIntent(prompt: string): boolean {
-  return /\b(publish|deploy|push|ship|post\s+to|send\s+to|upload|update|republish|sync|create\s+(a\s+)?remote\s+draft|create\s+(a\s+)?draft)\b/i.test(
-    prompt,
-  ) || /\bpost\b.{0,80}\bto\b/i.test(prompt);
+type RemoteWriteIntent = "none" | "draft" | "publish" | "update";
+
+function remoteWriteIntentFor(prompt: string): RemoteWriteIntent {
+  if (/\b(update|republish|sync)\b/i.test(prompt)) {
+    return "update";
+  }
+
+  if (/\b(create\s+(a\s+)?remote\s+draft|create\s+(a\s+)?draft|draft)\b/i.test(prompt)) {
+    return "draft";
+  }
+
+  if (/\b(publish|deploy|push|ship|post\s+to|send\s+to|upload)\b/i.test(prompt) || /\bpost\b.{0,80}\bto\b/i.test(prompt)) {
+    return "publish";
+  }
+
+  return "none";
+}
+
+function toolInputForIntent(
+  toolName: string,
+  toolInput: unknown,
+  intent: RemoteWriteIntent,
+): unknown {
+  if (
+    intent !== "draft" ||
+    toolName !== "wordpress_publish_post" ||
+    !toolInput ||
+    typeof toolInput !== "object" ||
+    "status" in toolInput
+  ) {
+    return toolInput;
+  }
+
+  return { ...(toolInput as Record<string, unknown>), status: "draft" };
 }

@@ -308,6 +308,51 @@ describe("runAgentOnce", () => {
     expect(toolRan).toBe(true);
   });
 
+  test("forces WordPress publish tools to draft for remote draft intent", async () => {
+    let toolInput: unknown;
+    let requestCount = 0;
+
+    globalThis.fetch = (async () => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        return jsonResponse({
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_draft",
+              name: "wordpress_publish_post",
+              input: { path: "1" },
+            },
+          ],
+        });
+      }
+
+      return jsonResponse({
+        content: [{ type: "text", text: "Draft created." }],
+      });
+    }) as typeof fetch;
+
+    const result = await runAgentOnce({
+      prompt: "create a draft of post 1 on wordpress",
+      model: "claude-test",
+      anthropicApiKey: "test-key",
+      skills: [
+        loadedSkill({
+          name: "wordpress",
+          toolName: "publish_post",
+          toolRun: async (input) => {
+            toolInput = input;
+            return "drafted";
+          },
+        }),
+      ],
+    });
+
+    expect(result).toBe("Draft created.");
+    expect(toolInput).toEqual({ path: "1", status: "draft" });
+  });
+
   test("allows publish tools when the current prompt says post a numbered item to a platform", async () => {
     let toolRan = false;
     let requestCount = 0;

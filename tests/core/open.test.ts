@@ -84,6 +84,18 @@ describe("resolveOpenTarget", () => {
       resolveOpenTarget({ root: await tempRoot(), args: ["post", "2"], posts: [] }),
     ).rejects.toThrow("Post number not found: 2");
   });
+
+  test("does not resolve markdown files outside canonical content directories", async () => {
+    const root = await tempRoot();
+    await writeFile(join(root, "secret.md"), "# Secret");
+
+    await expect(resolveOpenTarget({ root, args: ["post", "../secret.md"] })).rejects.toThrow(
+      "Post not found: ../secret.md",
+    );
+    await expect(resolveOpenTarget({ root, args: ["page", join(root, "secret.md")] })).rejects.toThrow(
+      `Page not found: ${join(root, "secret.md")}`,
+    );
+  });
 });
 
 async function tempRoot(): Promise<string> {

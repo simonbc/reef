@@ -1,5 +1,5 @@
 import { access } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolveContentReadCandidates } from "./workspace-paths";
 
 export type OpenKind = "post" | "page";
 export type OpenTarget =
@@ -62,7 +62,8 @@ async function resolveMarkdownPath(
   kind: OpenKind,
   slugOrPath: string,
 ): Promise<string> {
-  for (const candidate of markdownCandidates(root, kind, slugOrPath)) {
+  const directory = kind === "post" ? "posts" : "pages";
+  for (const candidate of resolveContentReadCandidates(root, directory, slugOrPath)) {
     try {
       await access(candidate);
       return candidate;
@@ -72,18 +73,6 @@ async function resolveMarkdownPath(
   }
 
   throw new Error(`${kind === "post" ? "Post" : "Page"} not found: ${slugOrPath}`);
-}
-
-function markdownCandidates(root: string, kind: OpenKind, slugOrPath: string): string[] {
-  const dir = kind === "post" ? "posts" : "pages";
-  const candidates = [slugOrPath, join(dir, slugOrPath)];
-
-  if (!slugOrPath.endsWith(".md")) {
-    candidates.push(`${slugOrPath}.md`);
-    candidates.push(join(dir, `${slugOrPath}.md`));
-  }
-
-  return [...new Set(candidates)].map((candidate) => resolve(root, candidate));
 }
 
 function resolveNumberedTarget(

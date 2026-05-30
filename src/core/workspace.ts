@@ -1,7 +1,13 @@
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { PageMeta, PostMeta, WorkspaceAPI } from "../skill-api";
 import { parseMarkdown } from "./markdown";
+import {
+  relativeWorkspacePath,
+  resolveContentReadCandidates,
+  resolveContentWritePath,
+  resolveMediaPath,
+} from "./workspace-paths";
 
 export async function createWorkspace(root: string): Promise<WorkspaceAPI> {
   const absoluteRoot = resolve(root);
@@ -27,17 +33,19 @@ export async function createWorkspace(root: string): Promise<WorkspaceAPI> {
     listMedia: () => listFiles(join(absoluteRoot, "media")),
     readMedia: async (filename) => {
       try {
-        return new Uint8Array(await readFile(join(absoluteRoot, "media", filename)));
+        return new Uint8Array(await readFile(resolveMediaPath(absoluteRoot, filename)));
       } catch {
         return null;
       }
     },
     writeMedia: async (filename, bytes) => {
-      const fullPath = join(absoluteRoot, "media", filename);
+      const fullPath = resolveMediaPath(absoluteRoot, filename);
       await mkdir(dirname(fullPath), { recursive: true });
       await writeFile(fullPath, bytes);
     },
-    deleteMedia: (filename) => rm(join(absoluteRoot, "media", filename), { force: true }),
+    deleteMedia: async (filename) => {
+      await rm(resolveMediaPath(absoluteRoot, filename), { force: true });
+    },
     search: async (query) => {
       const needle = query.toLowerCase();
       const posts = await listMarkdown(absoluteRoot, "posts");
@@ -94,7 +102,7 @@ async function listMarkdown(root: string, kind: "posts" | "pages"): Promise<(Pos
     const parsed = parseMarkdown(source, slug);
     items.push({
       slug,
-      path: relative(root, fullPath),
+      path: relativeWorkspacePath(root, fullPath),
       title: parsed.title,
       ...(kind === "posts" ? { date: parsed.frontmatter.date } : {}),
     });
@@ -110,7 +118,7 @@ async function readMarkdown(
   kind: "posts" | "pages",
   slugOrPath: string,
 ): Promise<string | null> {
-  for (const candidate of markdownCandidates(root, kind, slugOrPath)) {
+  for (const candidate of resolveContentReadCandidates(root, kind, slugOrPath)) {
     try {
       return await readFile(candidate, "utf8");
     } catch {
@@ -127,28 +135,13 @@ async function writeMarkdown(
   slug: string,
   markdown: string,
 ): Promise<void> {
-  const normalized = slug.endsWith(".md") ? slug : `${slug}.md`;
-  const fullPath = join(root, kind, normalized);
+  const fullPath = resolveContentWritePath(root, kind, slug);
   await mkdir(dirname(fullPath), { recursive: true });
   await writeFile(fullPath, markdown);
 }
 
 async function deleteMarkdown(root: string, kind: "posts" | "pages", slug: string): Promise<void> {
-  const normalized = slug.endsWith(".md") ? slug : `${slug}.md`;
-  await rm(join(root, kind, normalized), { force: true });
-}
-
-function markdownCandidates(root: string, kind: "posts" | "pages", slugOrPath: string): string[] {
-  const candidates = [slugOrPath];
-
-  candidates.push(join(kind, slugOrPath));
-
-  if (!slugOrPath.endsWith(".md")) {
-    candidates.push(`${slugOrPath}.md`);
-    candidates.push(join(kind, `${slugOrPath}.md`));
-  }
-
-  return [...new Set(candidates)].map((candidate) => resolve(root, candidate));
+  await rm(resolveContentWritePath(root, kind, slug), { force: true });
 }
 
 async function listFiles(dir: string): Promise<string[]> {
@@ -156,7 +149,7 @@ async function listFiles(dir: string): Promise<string[]> {
     const entries = await readdir(dir, { recursive: true, withFileTypes: true });
     return entries
       .filter((entry) => entry.isFile())
-      .map((entry) => relative(dir, join(entry.parentPath, entry.name)));
+      .map((entry) => relativeWorkspacePath(dir, join(entry.parentPath, entry.name)));
   } catch {
     return [];
   }

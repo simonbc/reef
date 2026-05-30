@@ -129,6 +129,14 @@ describe("loadConfig", () => {
       },
     });
   });
+
+  test("reports malformed config instead of silently ignoring it", async () => {
+    const root = await tempRoot("reef-bad-config-");
+    await writeFile(join(root, "reef.toml"), 'title: "Bad syntax"\n');
+
+    await expect(loadConfig(root)).rejects.toThrow("Invalid TOML in");
+    await expect(loadConfig(root)).rejects.toThrow("line 1");
+  });
 });
 
 async function tempRoot(prefix: string): Promise<string> {

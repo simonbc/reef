@@ -80,6 +80,45 @@ describe("createWorkspace", () => {
     await workspace.deleteMedia("images/hero.bin");
     await expect(workspace.readMedia("images/hero.bin")).resolves.toBeNull();
   });
+
+  test("does not read markdown outside canonical content directories", async () => {
+    const root = await tempRoot();
+    const outside = join(root, "secret.md");
+    await writeFile(outside, "# Secret\n");
+    const workspace = await createWorkspace(root);
+
+    await expect(workspace.readPost("../secret.md")).resolves.toBeNull();
+    await expect(workspace.readPost(outside)).resolves.toBeNull();
+    await expect(workspace.readPage("../secret.md")).resolves.toBeNull();
+  });
+
+  test("rejects writes and deletes outside canonical content directories", async () => {
+    const root = await tempRoot();
+    const workspace = await createWorkspace(root);
+
+    await expect(workspace.writePost("../escape", "# Escape")).rejects.toThrow(
+      "Path must stay inside posts/",
+    );
+    await expect(workspace.writePage("../escape", "# Escape")).rejects.toThrow(
+      "Path must stay inside pages/",
+    );
+    await expect(workspace.deletePost("../escape")).rejects.toThrow(
+      "Path must stay inside posts/",
+    );
+  });
+
+  test("rejects media paths outside media directory", async () => {
+    const root = await tempRoot();
+    const workspace = await createWorkspace(root);
+
+    await expect(workspace.writeMedia("../escape.bin", new Uint8Array([1]))).rejects.toThrow(
+      "Path must stay inside media/",
+    );
+    await expect(workspace.deleteMedia("../escape.bin")).rejects.toThrow(
+      "Path must stay inside media/",
+    );
+    await expect(workspace.readMedia("../escape.bin")).resolves.toBeNull();
+  });
 });
 
 async function tempRoot(): Promise<string> {

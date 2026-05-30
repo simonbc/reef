@@ -79,6 +79,17 @@ describe("createLivePreview", () => {
     expect(response.status).toBe(404);
     await expect(response.text()).resolves.toContain("Markdown source was not found.");
   });
+
+  test("does not render markdown outside canonical content directories", async () => {
+    const root = await tempRoot();
+    await writeFile(join(root, "secret.md"), "# Secret\n\nOutside.");
+    const preview = createLivePreview({ root, title: "Runtime Reef" });
+
+    const response = await preview.render("/posts/../secret/");
+
+    expect(response.status).toBe(404);
+    await expect(response.text()).resolves.not.toContain("Outside.");
+  });
 });
 
 async function tempRoot(): Promise<string> {
